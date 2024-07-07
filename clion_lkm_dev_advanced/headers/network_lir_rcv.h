@@ -8,6 +8,7 @@
 #include "network_lir_header.h"
 #include "support_ftrace_hook_api.h"
 #include "lir_configuration.h"
+#define NET_RX_REENCODING_FORWARD 2
 extern struct ftrace_hook hooks[MAXIMUM_SUPPORTED_HOOK_FUNCTIONS];
 extern int number_of_hook;
 void resolve_network_lir_rcv_inner_functions_address(void);

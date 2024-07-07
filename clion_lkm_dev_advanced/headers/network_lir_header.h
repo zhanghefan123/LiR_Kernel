@@ -25,6 +25,7 @@ struct lirhdr {
     __sum16	check;          // 校验和
     __u16 source;           // 源节点编号
     __u16 destination;      // 目的节点编号
+    __u16 intermediate;     // 中间节点编号
 };
 
 struct lirhdr* lir_hdr(const struct sk_buff* skb);

@@ -9,6 +9,8 @@
 #include "headers/mac_netif_rcv_skb.h"
 #include "headers/transport_lir_udp_sendmsg.h"
 #include "headers/network_lir_rcv.h"
+#include "headers/ip_route_input_noref_without_cache.h"
+#include "headers/ip_route_output_flow_without_cache.h"
 
 // 我们添加的 hook 列表, 假设最多10个
 struct ftrace_hook hooks[MAXIMUM_SUPPORTED_HOOK_FUNCTIONS];
@@ -31,6 +33,8 @@ int install_hook_functions(void) {
 void add_hook_functions(){
     add_netif_rcv_skb_to_hook();
     add_udp_sendmsg_to_hook();
+//    add_ip_route_input_noref_to_hook();
+//    add_ip_route_output_flow_to_hook();
 }
 
 

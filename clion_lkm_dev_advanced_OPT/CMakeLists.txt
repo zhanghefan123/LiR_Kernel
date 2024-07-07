@@ -40,8 +40,8 @@ add_executable(dummy
         network_lir_rcv.c
         network_ip_rcv.c
         network_sk_data.c
-        network_opt_path_table.c
         crypto_function.c
+        session_path_table.c
 )
 
 set(HEADERS_DIR include)

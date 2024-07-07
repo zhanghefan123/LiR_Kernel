@@ -497,26 +497,26 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
     lir_header->header_len += lir_return_data_structure->bloom_filter->effective_bytes;
     lir_header->header_len = htons(lir_header->header_len); // 最终在进行修改的时候，将字段改过来，改为大端存储
     lir_select_id(net, skb, sk, 1, source_node_id, destination_node_id);
-    unsigned char* hash_of_static_fields = calculate_static_fields_hash(lir_header, net); // calculate static hash
+    unsigned char* hash_of_static_fields = calculate_static_fields_hash(lir_header, net); // 计算静态哈希
     // ---------------------- get route and fill bloom filter ----------------------
-    struct RoutingTableEntry* lir_routing_entry = lir_return_data_structure->routing_table_entry;
-    struct shash_desc* hmac_data_structure = get_hmac_data_structure(net);
-    int index;
-    int current_satellite_id = get_satellite_id(net);
+    struct RoutingTableEntry* lir_routing_entry = lir_return_data_structure->routing_table_entry;  // 首先拿到路由表项
+    struct shash_desc* hmac_data_structure = get_hmac_data_structure(net);  // 拿到 hmac 结构体
+    int index;  // 创建索引
+    int current_satellite_id = get_satellite_id(net); // 获取当前卫星 id
     u32 final_insert_element = 0;
-    for(index = 0; index < lir_routing_entry->length_of_path; index++){
-        int intermediate_node = lir_routing_entry->node_ids[index];
-        char key_from_source_to_intermediate[20];
-        sprintf(key_from_source_to_intermediate, "key-%d-%d", current_satellite_id, intermediate_node);
+    for(index = 0; index < lir_routing_entry->length_of_path; index++){ // 遍历路径之中的所有项
+        int intermediate_node = lir_routing_entry->node_ids[index]; // 拿到中间节点
+        char key_from_source_to_intermediate[20];  // 密钥的存放字符串
+        sprintf(key_from_source_to_intermediate, "key-%d-%d", current_satellite_id, intermediate_node); // 填充密钥字符串
         u32* hmac_result = calculate_hmac(hmac_data_structure,
                                           hash_of_static_fields,
                                           LENGTH_OF_HASH,
-                                          key_from_source_to_intermediate);
+                                          key_from_source_to_intermediate); // 利用密钥计算hmac
         if(index != lir_routing_entry->length_of_path - 1){
             int link_identifier = lir_routing_entry->link_identifiers[index+1];
             final_insert_element ^= (*hmac_result) ^ (u32)(link_identifier);
         } else {
-            final_insert_element ^= (*hmac_result);
+            final_insert_element ^= (*hmac_result); // 计算插入的元素
         }
         kfree(hmac_result);
         push_element_into_bloom_filter(lir_return_data_structure->bloom_filter, &final_insert_element,sizeof(u32));

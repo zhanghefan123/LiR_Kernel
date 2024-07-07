@@ -281,7 +281,8 @@ int lir_ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *skb,
     }
 
     rcu_read_lock_bh();
-    neigh = lir_ip_neigh_for_gw(output_dev);
+    // neigh = lir_ip_neigh_for_gw(output_dev);
+    neigh = ip_neigh_gw4(output_dev, INADDR_BROADCAST);
     if (!IS_ERR(neigh)) {
         int res;
 

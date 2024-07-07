@@ -140,8 +140,8 @@ __u16 get_opt_header_total_length(struct LirReturnDataStructure *lir_return_data
         // single_hop_field[3] = {node_id: D}
     } else {
         return (__u16) (sizeof(struct lirhdr)) +
-               (__u16) (sizeof(struct path_validation_field)) +
-               (__u16) (sizeof(struct origin_validation_field)) * length_of_path;
+               (__u16) (sizeof(struct path_validation_field)) +    // PVF 字段
+               (__u16) (sizeof(struct origin_validation_field)) * (length_of_path); // OPV 字段
     }
 }
 
@@ -508,20 +508,19 @@ void fill_opt_field(struct lirhdr *lir_header,
                     struct LirReturnDataStructure *lir_return_data_structure,
                     struct net *current_net_namespace,
                     bool first_packet) {
-    // 处理第一个数据包
-    if (first_packet) {
-        struct RoutingTableEntry *routing_table_entry = lir_return_data_structure->routing_table_entry;
-        struct shash_desc* hash_data_structure = get_hash_data_structure(current_net_namespace);
-        int length_of_path = routing_table_entry->length_of_path;
-        int source = get_satellite_id(current_net_namespace);
-        int index;
-        int extension_header_length = (int)(sizeof(struct length_of_path)) + (int) ((length_of_path + 1) * (sizeof(struct single_hop_field)));
-        unsigned char* extension_header_start = (unsigned char*)(&lir_header[1]);
-        struct length_of_path * length_of_path_tmp = (struct length_of_path*)(extension_header_start);
+    if (first_packet) { // 处理第一个数据包
+        struct RoutingTableEntry *routing_table_entry = lir_return_data_structure->routing_table_entry;  // 获取路由表项
+        struct shash_desc* hash_data_structure = get_hash_data_structure(current_net_namespace);  // 计算 hash
+        int length_of_path = routing_table_entry->length_of_path; // 计算长度
+        int source = get_satellite_id(current_net_namespace);  // 拿到 id
+        int index;  // 拿到索引
+        int extension_header_length = (int)(sizeof(struct length_of_path)) + (int) ((length_of_path + 1) * (sizeof(struct single_hop_field)));  // 计算额外包头的长度
+        unsigned char* extension_header_start = (unsigned char*)(&lir_header[1]); // 拿到额外包头的开始
+        struct length_of_path * length_of_path_tmp = (struct length_of_path*)(extension_header_start);  //
         length_of_path_tmp->length_of_path = length_of_path;
         struct single_hop_field *opt_path = (struct single_hop_field *) (extension_header_start + sizeof(struct length_of_path));
-        opt_path[0].node_id = source;
-        opt_path[0].link_identifier = routing_table_entry->link_identifiers[0];
+        opt_path[0].node_id = source; // 第一个存源节点 id
+        opt_path[0].link_identifier = routing_table_entry->link_identifiers[0]; // 然后存链路标识
         for (index = 0; index < length_of_path - 1; index++) {
             opt_path[index + 1].node_id = routing_table_entry->node_ids[index];
             opt_path[index + 1].link_identifier = routing_table_entry->link_identifiers[index + 1];
@@ -531,10 +530,53 @@ void fill_opt_field(struct lirhdr *lir_header,
         unsigned char* path_hash = calculate_fixed_length_hash(hash_data_structure, extension_header_start, extension_header_length);
         print_hash_or_hmac_result(path_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
         kfree(path_hash);
-    }
-    // 处理其他的数据包
-    else {
+    } else { // 处理其他的数据包
+        struct RoutingTableEntry* routing_table_entry = lir_return_data_structure->routing_table_entry;
+        int length_of_path = routing_table_entry->length_of_path;
+        unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, current_net_namespace);
+        struct shash_desc* hmac_data_structure = get_hmac_data_structure(current_net_namespace);
+        int pvf_size = sizeof(struct path_validation_field);
+        int ovfs_size = sizeof(struct origin_validation_field) * length_of_path;
+        struct path_validation_field* pvf = (struct path_validation_field*)kmalloc(pvf_size, GFP_KERNEL);
+        struct origin_validation_field* ovfs = (struct origin_validation_field*)kmalloc(ovfs_size, GFP_KERNEL);
+        int current_satellite_id = get_satellite_id(current_net_namespace);
+        // --------------------------------initialize pvf--------------------------------
+        char key_from_source_to_end[20];
+        int final_node = routing_table_entry->node_ids[routing_table_entry->length_of_path-1]; // 获取路径最后一个节点id
+        sprintf(key_from_source_to_end, "key-%d-%d", current_satellite_id, final_node);
+        unsigned char* hmac_result = calculate_hmac(hmac_data_structure,
+                                                    static_fields_hash,
+                                                    HASH_OUTPUT_LENGTH_IN_BYTES,
+                                                    key_from_source_to_end);
+        memcpy(pvf, hmac_result, OPT_VALIDATION_SIZE_IN_BYTES); // 将计算出来的 hmac 结果拷贝
+        print_hash_or_hmac_result((unsigned char *) pvf, OPT_VALIDATION_SIZE_IN_BYTES);
+        kfree(hmac_result);  // 释放 hmac 结果
+        // --------------------------------initialize pvf--------------------------------
+        // --------------------------------initialize ovfs-------------------------------
+        int index;
+        for(index = 0; index < length_of_path; index++){
+            char key_from_source_to_intermediate[20];
+            sprintf(key_from_source_to_intermediate, "key-%d-%d", current_satellite_id, routing_table_entry->node_ids[index]);
+            unsigned char* hmac_result_new = calculate_hmac(hmac_data_structure,
+                                                            static_fields_hash,
+                                                            HASH_OUTPUT_LENGTH_IN_BYTES,
+                                                            key_from_source_to_intermediate);
+            memcpy(&ovfs[index], hmac_result_new, OPT_VALIDATION_SIZE_IN_BYTES);
+            kfree(hmac_result_new);
+        }
+        kfree(static_fields_hash);
+        // --------------------------------initialize ovfs-------------------------------
+        // ----------------------------place into lirheader------------------------------
+        unsigned char* copy_source = (unsigned char*)(pvf);
+        unsigned char* copy_destination = ((unsigned char*)lir_header) + sizeof(struct lirhdr);
+        memcpy(copy_destination, copy_source, pvf_size);
 
+        copy_source = (unsigned char*)(ovfs);
+        copy_destination = ((unsigned char*)lir_header) + sizeof(struct lirhdr) + pvf_size;
+        memcpy(copy_destination, copy_source, ovfs_size);
+        // ----------------------------place into lirheader------------------------------
+        kfree(pvf);
+        kfree(ovfs);
     }
 }
 

@@ -554,25 +554,25 @@ void update_validation_fields(struct lirhdr* lir_header,
 
 int
 lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
-    struct lirhdr *lir_header = lir_hdr(skb);                     // get lir header
-    int current_path_index = ntohs(lir_header->current_path_index);            // get current index
-    int length_of_path = ntohs(lir_header->length_of_path);             // length of path
-    struct NewInterfaceTable *new_interface_table = get_new_interface_table_from_net_namespace(current_net_namespace);
-    unsigned char *extension_header_for_icing = (unsigned char *) &(lir_header[1]);
-    struct single_hop_icing *icing_path = (struct single_hop_icing *) (extension_header_for_icing);
+    struct lirhdr *lir_header = lir_hdr(skb);                     // 首先获取数据包的头部
+    int current_path_index = ntohs(lir_header->current_path_index);            // 获取当前的索引
+    int length_of_path = ntohs(lir_header->length_of_path);             // 获取总长度
+    struct NewInterfaceTable *new_interface_table = get_new_interface_table_from_net_namespace(current_net_namespace); // 获取接口表
+    unsigned char *extension_header_for_icing = (unsigned char *) &(lir_header[1]);  // 获取 lir_header 后面的部分 (包括 path + validation 部分)
+    struct single_hop_icing *icing_path = (struct single_hop_icing *) (extension_header_for_icing);  // 拿到 path 部分
     unsigned char *extension_header_for_validation_list = (unsigned char *) (extension_header_for_icing +
                                                                              sizeof(struct single_hop_icing) *
-                                                                             length_of_path);
+                                                                             length_of_path); // 拿到 validation_list 部分
     struct single_node_validation_icing *validation_list = (struct single_node_validation_icing *) (extension_header_for_validation_list);
-    __u32 current_link_identifier = icing_path[current_path_index].tag;
-    int current_satellite_id = get_satellite_id(current_net_namespace);
+    __u32 current_link_identifier = icing_path[current_path_index].tag; // 根据当前的 index 拿到 link identifier
+    int current_satellite_id = get_satellite_id(current_net_namespace); // 拿到当前的卫星 id
     int source_satellite_id = ntohs(lir_header->source);
     // =========================  find previous node sequence=========================
-    print_upstream_node_sequence(icing_path, current_path_index, source_satellite_id);
+    print_upstream_node_sequence(icing_path, current_path_index, source_satellite_id); // 打印上游节点
     // =========================  find previous node sequence=========================
 
     // ========================  find downstream node sequence========================
-    print_downstream_node_sequence(icing_path, current_path_index, length_of_path);
+    print_downstream_node_sequence(icing_path, current_path_index, length_of_path);  // 打印下游节点
     // ========================  find downstream node sequence========================
 
     // ========================  validate the packet ========================

@@ -491,7 +491,7 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
 /**
  *
  * EXAMPLE
-   SAT1 --> SAT2 --> SAT3 --> SAT4
+   SAT1 --LID1--> SAT2 --LID2--> SAT3 --LID3--> SAT4 三跳的路径
    length_of_path = 3
    path[0] node_id = SAT2 link_identifier = L2 current_path_index=0
    path[1] node_id = SAT3 link_identifier = L3 current_path_index=1
@@ -501,46 +501,46 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
  * @param net
  */
 void fill_icing_field(struct lirhdr* lir_header, struct LirReturnDataStructure* lir_return_data_structure, struct net* net){
-    struct RoutingTableEntry* routing_table_entry = lir_return_data_structure->routing_table_entry;
-    int length_of_path = routing_table_entry->length_of_path;  // if there are three link identifiers / there are total of 4 nodes
-    int index;
-    int total_allocate_length_for_path = (int)(sizeof(struct single_hop_icing)) * length_of_path;
-    lir_header->length_of_path = htons(length_of_path);
+    struct RoutingTableEntry* routing_table_entry = lir_return_data_structure->routing_table_entry; // 进行路由表条目的获取
+    int length_of_path = routing_table_entry->length_of_path;  // 获取路径的长度 if there are three link identifiers / there are total of 4 nodes
+    int index; // for 循环索引
+    int total_allocate_length_for_path = (int)(sizeof(struct single_hop_icing)) * length_of_path; // 总的 ICING PATH 的长度 sizeof(struct single_hop_icing) = 128bit
+    lir_header->length_of_path = htons(length_of_path); // 链路标识的数量
     // ----------------------- fill path -----------------------
-    struct single_hop_icing* path = (struct single_hop_icing*)(kmalloc(sizeof(struct single_hop_icing) * length_of_path, GFP_KERNEL));
-    int current_satellite_id = get_satellite_id(net);
-
+    struct single_hop_icing* path = (struct single_hop_icing*)(kmalloc(sizeof(struct single_hop_icing) * length_of_path, GFP_KERNEL)); // 为路径分配内存
+    int current_satellite_id = get_satellite_id(net); // 获取当前的卫星的 id
     for(index = 0; index < length_of_path; index++){
         if(index != (length_of_path - 1)){
+            // 存储下 (SAT2/LID2) (SAT3/LID3)
             path[index].node_id_5 = routing_table_entry->node_ids[index];
             path[index].tag = routing_table_entry->link_identifiers[index+1];
         }
         else {
+            // 存储下 (SAT4)
             path[index].node_id_5 = routing_table_entry->node_ids[index];
         }
     }
-    // copy to the icing part in header
-    unsigned char* source = (unsigned char*)path;
-    unsigned char* destination = ((unsigned char*)lir_header) + sizeof(struct lirhdr);
+    unsigned char* source = (unsigned char*)path; // source 指向 path 存放的内存位置, 准备被拷贝
+    unsigned char* destination = ((unsigned char*)lir_header) + sizeof(struct lirhdr);  // path 将被放到 lirhdr 的后面
     memcpy(destination, source, total_allocate_length_for_path);
-    kfree(path);
+    kfree(path); // 释放 path 的空间
     // ----------------------- fill path -----------------------
 
     // ----------------------- fill validation -----------------------
-    int total_allocate_length_for_validation = (int)(sizeof(struct single_node_validation_icing)) * length_of_path;
-    unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, net);
-    // print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
-    struct shash_desc* hmac_data_structure = get_hmac_data_structure(net);
-    struct single_node_validation_icing* validation_list = (struct single_node_validation_icing*)(kmalloc(sizeof(struct single_node_validation_icing) * length_of_path, GFP_KERNEL));
-    for(index = 0; index < length_of_path; index++){
-        int intermediate_satellite_id = routing_table_entry->node_ids[index];
-        char key_from_source_to_intermediate[20];
-        sprintf(key_from_source_to_intermediate, "key-%d-%d", current_satellite_id, intermediate_satellite_id);
+    int total_allocate_length_for_validation = (int)(sizeof(struct single_node_validation_icing)) * length_of_path; // 每个节点都需要一个验证字段
+    unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, net); // 计算静态字段的哈希
+    // print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES); // 打印哈希
+    struct shash_desc* hmac_data_structure = get_hmac_data_structure(net); // 通过网络命名空间获取 hmac 密码工具
+    struct single_node_validation_icing* validation_list = (struct single_node_validation_icing*)(kmalloc(sizeof(struct single_node_validation_icing) * length_of_path, GFP_KERNEL)); // 为验证字段创建内存空间
+    for(index = 0; index < length_of_path; index++){ // 开始初始化每一个验证字段
+        int intermediate_satellite_id = routing_table_entry->node_ids[index]; // 拿到每一个 enroute 的节点
+        char key_from_source_to_intermediate[20]; // 准备存放密钥字符串的字符数组
+        sprintf(key_from_source_to_intermediate, "key-%d-%d", current_satellite_id, intermediate_satellite_id); // 模拟进行密钥的构建
         unsigned char* hmac_result = calculate_hmac(hmac_data_structure,
                                                     static_fields_hash,
                                                     HASH_OUTPUT_LENGTH_IN_BYTES,
-                                                    key_from_source_to_intermediate);
-        memcpy(&validation_list[index], hmac_result, ICING_VALIDATION_SIZE_IN_BYTES);
+                                                    key_from_source_to_intermediate); // 利用 k(本节点,中间节点) 对数据包静态哈希进行校验。
+        memcpy(&validation_list[index], hmac_result, ICING_VALIDATION_SIZE_IN_BYTES); // 将结果拷贝到验证字段数组之中。
         // zhf add code
         if(index == 0){
             print_hash_or_hmac_result((unsigned char*)(&validation_list[index]), ICING_VALIDATION_SIZE_IN_BYTES);
@@ -548,12 +548,13 @@ void fill_icing_field(struct lirhdr* lir_header, struct LirReturnDataStructure* 
         // zhf add code
         kfree(hmac_result);
     }
-    source = (unsigned char*)(validation_list);
-    destination = ((unsigned char*)lir_header) + sizeof(struct lirhdr) + total_allocate_length_for_path;
-    memcpy(destination, source, total_allocate_length_for_validation);
-    kfree(static_fields_hash);
-    kfree(validation_list);
+    source = (unsigned char*)(validation_list);  // 同样是获取 memcpy 的源
+    destination = ((unsigned char*)lir_header) + sizeof(struct lirhdr) + total_allocate_length_for_path; // 获取 memcpy 的目标
+    memcpy(destination, source, total_allocate_length_for_validation); // 将验证数组添在后面
+    kfree(static_fields_hash); // 释放哈希
+    kfree(validation_list);  // 释放验证字段
     // ----------------------- fill validation -----------------------
+    // 长度会在 send skb 的时候进行初始化
 }
 
 int lir_send_skb(struct net* net, struct sk_buff *skb, struct net_device* output_dev){

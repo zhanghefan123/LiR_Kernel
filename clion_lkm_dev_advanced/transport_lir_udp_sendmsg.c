@@ -42,6 +42,7 @@ int lir_udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len){
     __u16 source_node_id = get_satellite_id(current_net_namespace);  // 源节点编号
     __u16 destination_node_id;                                       // 目的节点编号
     // --------------      initialize        --------------
+    // LOG_WITH_PREFIX("lir udp sendmsg called");
 
     // --------------  get daddr dport sport --------------
     // daddr = usin->sin_addr.s_addr;

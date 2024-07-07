@@ -12,6 +12,7 @@
 #include "lir_routing_table_structure.h"
 // ----------------------- net namespace 之中额外定义的数据结构 -----------------------
 struct LirDataStructure {
+    struct hlist_head* session_path_table; // 会话路径表的存储
     struct hlist_head* lir_routing_table; // 路由表指针的存储
     struct NewInterfaceTable* new_interface_table; // new interface table storage
     struct bloom_filter* bloom_filter;  // 全网需要统一布隆过滤器的使用
@@ -47,6 +48,7 @@ void free_lir_data_structure_in_net_namespace(struct net* net_namespace);
 
 // ----------------------------- 获取与设置数据结构的属性 -----------------------------
 struct LirDataStructure* get_lir_data_structure(struct net* net_namespace);
+struct hlist_head* get_session_path_table_from_net_namespace(struct net* net_namespace);
 struct hlist_head* get_lir_routing_table_from_net_namespace(struct net* net_namespace);
 void set_satellite_id(struct net* net_namespace, int satellite_id);
 int get_satellite_id(struct net* net_namespace);

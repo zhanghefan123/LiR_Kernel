@@ -17,6 +17,7 @@ struct LirDataStructure {
     int satellite_id; // 卫星的id
     int* link_identifiers; // 单颗卫星所具有的链路标识
     int number_of_link_identifiers; // 链路标识的数量
+    int encoding_count; // 单次封装的链路标识的数量
     bool initializing; // 是否是初始化阶段
     struct bloom_filter* route_bloom_filter; // 用于 tcp 的
     struct net_device* output_interface; // 出接口
@@ -30,6 +31,7 @@ struct LirReturnDataStructure {
     struct bloom_filter* bloom_filter; // 结果布隆过滤器
     struct net_device* output_interface; // 出接口
     int destination_node_id;           // 目的卫星编号
+    int intermediate_node_id;          // 中间节点编号
 };
 // ----------------------- 返回的数据结构 -----------------------
 
@@ -48,6 +50,8 @@ struct LirDataStructure* get_lir_data_structure(struct net* net_namespace);
 struct hlist_head* get_lir_routing_table_from_net_namespace(struct net* net_namespace);
 void set_satellite_id(struct net* net_namespace, int satellite_id);
 int get_satellite_id(struct net* net_namespace);
+void set_encoding_count(struct net* net_namespace, int encoding_count);
+int get_encoding_count(struct net* net_namespace);
 struct bloom_filter* get_bloom_filter(struct net* net_namespace);
 bool get_if_initializing(struct net* net_namespace);
 void set_initialized(struct net* net_namespace);

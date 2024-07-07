@@ -457,7 +457,6 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
     struct sk_buff *skb, *tmp_skb;
     struct sk_buff **tail_skb;
     struct inet_sock *inet = inet_sk(sk);
-    // struct ip_options *opt = NULL;
     struct lirhdr* lir_header;
     struct net* net = sock_net(sk);
     __be16 df = 0;
@@ -487,21 +486,25 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
         inet->pmtudisc == IP_PMTUDISC_PROBE ||
         (skb->len <= lir_return_data_structure->output_interface->mtu))
         df = htons(IP_DF);
-//    if (cork->flags & IPCORK_OPT)
-//        opt = cork->opt;
 
     lir_header = lir_hdr(skb);
     lir_header->version = 5;
+    lir_header->intermediate = lir_return_data_structure->intermediate_node_id;
     lir_header->header_len  = sizeof(struct lirhdr); // without option later will add
     lir_header->protocol = sk->sk_protocol; // udp upper layer protocol
     lir_header->frag_off = df;
-    lir_header->source = htons(source_node_id);
-    lir_header->destination = htons(destination_node_id);
+    lir_header->source = source_node_id;
+    lir_header->destination = destination_node_id;
     lir_header->header_len += lir_return_data_structure->bloom_filter->effective_bytes;
     lir_header->header_len = htons(lir_header->header_len); // 最终在进行修改的时候，将字段改过来，改为大端存储
     lir_select_id(net, skb, sk, 1, source_node_id, destination_node_id);
     unsigned char *lir_header_tmp = skb_network_header(skb);
+    // ------------------------------------------------------
+    //    u64 start = ktime_get_real_ns();
     memcpy(lir_header_tmp + sizeof(struct lirhdr), lir_return_data_structure->bloom_filter->bitset, lir_return_data_structure->bloom_filter->effective_bytes);
+    //    u64 time_elapsed = ktime_get_real_ns() - start;
+    //    printk(KERN_EMERG "Memcpy Time elapsed %llu ns \n", time_elapsed);
+    // ------------------------------------------------------
     skb->priority = (cork->tos != -1) ? cork->priority : sk->sk_priority;
     skb->mark = cork->mark;
     skb->tstamp = cork->transmit_time;

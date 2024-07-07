@@ -2,7 +2,7 @@
 # see online for more information
 CONFIG_MODULE_SIG=n
 # will build "hello.ko"
-obj-m += lir.o
+obj-m += bpt.o
 
 # we have no file "hello.c" in this example
 # therefore we specify: module hello.ko relies on
@@ -10,7 +10,7 @@ obj-m += lir.o
 # see online resources for more information
 # YOU DON'T need this IF you have *.c-file with the name of the
 # final kernel module :)
-lir-objs := \
+bpt-objs := \
 	support_tools.o \
 	support_ftrace_hook_api.o \
 	support_hook_functions.o \

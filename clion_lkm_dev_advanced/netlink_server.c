@@ -77,6 +77,12 @@ const struct genl_ops exmpl_gnl_ops_echo[] = {
                 .cmd = CMD_GET_BIND_ID,
                 .policy = attr_type_mapping,
                 .doit = get_bind_id_handler
+        },
+        // 接收到用户空间想要设置 encoding count 的命令，绑定相应的 callback function, index == 9
+        {
+                .cmd = CMD_SET_ENCODING_COUNT,
+                .policy = attr_type_mapping,
+                .doit = set_encoding_count_handler
         }
 };
 

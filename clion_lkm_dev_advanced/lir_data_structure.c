@@ -113,6 +113,27 @@ int get_satellite_id(struct net* net_namespace){
     return lir_data_structure->satellite_id;
 }
 
+
+/**
+ * 将单次封装的链路标识的数量存放到网络命名空间之中
+ * @param net_namespace 当前的网络命名空间
+ * @param encoding_count 单次封装的链路标识数量
+ */
+void set_encoding_count(struct net* net_namespace, int encoding_count){
+    struct LirDataStructure* lir_data_structure = (struct LirDataStructure*)(net_namespace->crypto_nlsk);
+    lir_data_structure->encoding_count = encoding_count;
+}
+
+/**
+ * 将单次封装的链路标识的数量存放到网络命名空间之中
+ * @param net_namespace 当前的网络命名空间
+ * @return 单次封装的链路标识数量
+ */
+int get_encoding_count(struct net* net_namespace){
+    struct LirDataStructure* lir_data_structure = (struct LirDataStructure*)(net_namespace->crypto_nlsk);
+    return lir_data_structure->encoding_count;
+}
+
 /**
  * 通过网络命名空间获取布隆过滤器
  * @param net_namespace 当前的网络命名空间
@@ -141,6 +162,8 @@ void set_initialized(struct net* net_namespace){
     struct LirDataStructure* lir_data_structure = (struct LirDataStructure*)(net_namespace->crypto_nlsk);
     lir_data_structure->initializing = false;
 }
+
+
 
 /**
  * get hmac calculation function

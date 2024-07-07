@@ -168,7 +168,7 @@ int bind_net_to_sat_id_handler(struct sk_buff *request, struct genl_info *info) 
     set_satellite_id(current_net_namespace, satellite_id);
     // 打印到内核说明完成绑定
     LOG_WITH_EDGE("bind process");
-    printk(KERN_EMERG "[zeusnet's kernel info]:satellite_name %d set up\n", get_satellite_id(current_net_namespace));
+    printk(KERN_EMERG "[zeusnet's kernel info]:satellite id %d set up\n", get_satellite_id(current_net_namespace));
     LOG_WITH_EDGE("bind process");
     // ------------------------ 准备进行消息的处理 ------------------------
 
@@ -186,7 +186,7 @@ int bind_net_to_sat_id_handler(struct sk_buff *request, struct genl_info *info) 
         return -ENOMEM;
     }
     // 将响应消息的内容进行填充
-    snprintf(response_msg, sizeof(response_msg), "satellite_name %d set up", get_satellite_id(current_net_namespace));
+    snprintf(response_msg, sizeof(response_msg), "satellite id %d set up", get_satellite_id(current_net_namespace));
     // 进行响应消息的构建
     if (0 != nla_put_string(reply, EXMPL_NLA_DATA, response_msg)) {
         return -EINVAL;
@@ -733,6 +733,76 @@ int get_bind_id_handler(struct sk_buff* request, struct genl_info* info){
         return -EINVAL;
     }
     if (0 != nla_put_u32(reply, EXMPL_NLA_LEN, 1)) {
+        return -EINVAL;
+    }
+    // 结束响应消息的构建
+    genlmsg_end(reply, msg_head);
+    // 进行消息的返回
+    if (0 != genlmsg_reply(reply, info)) {
+        return -EINVAL;
+    }
+    return 0;
+    // ------------------------ 准备进行消息的回复 ------------------------
+}
+
+/**
+ * 将网络命名空间和卫星的id进行相互绑定
+ * @param request 用户空间发送的请求
+ * @param info generate_netlink 的信息
+ * @return  0 失败则返回 -EINVAL
+ */
+int set_encoding_count_handler(struct sk_buff *request, struct genl_info *info) {
+    // 网络命名空间
+    struct net *current_net_namespace = sock_net(request->sk);
+    // 响应的报文
+    struct sk_buff *reply;
+    // 缓存 - 用户空间下发的数据
+    char *buffer;
+    // 消息头
+    void *msg_head;
+    // 响应消息
+    char response_msg[1024];
+    int encoding_count;
+
+    // 判断 generate netlink info 是否为空
+    if (info == NULL) {
+        return -EINVAL;
+    }
+    // 判断是否有数据
+    if (!info->attrs[EXMPL_NLA_DATA]) {
+        return -EINVAL;
+    }
+
+    // ------------------------ 准备进行消息的处理 ------------------------
+    buffer = nla_data(info->attrs[EXMPL_NLA_DATA]);
+    encoding_count = (int) (simple_strtol(buffer, NULL, 10));
+    set_encoding_count(current_net_namespace, encoding_count);
+    // 打印到内核说明完成绑定
+    LOG_WITH_EDGE("bind process");
+    printk(KERN_EMERG "[zeusnet's kernel info]:encoding count %d set up\n", get_encoding_count(current_net_namespace));
+    LOG_WITH_EDGE("bind process");
+    // ------------------------ 准备进行消息的处理 ------------------------
+
+    // ------------------------ 准备进行消息的回复 ------------------------
+    // 进行内存的分配
+    reply = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+    // 看是否成功的进行了分配
+    if (reply == NULL) {
+        return -ENOMEM;
+    }
+    // 进行返回消息的构建
+    // 首先进行消息头的构建
+    msg_head = genlmsg_put_reply(reply, info, &exmpl_genl_family, 0, info->genlhdr->cmd);
+    if (msg_head == NULL) {
+        return -ENOMEM;
+    }
+    // 将响应消息的内容进行填充
+    snprintf(response_msg, sizeof(response_msg), "encoding count %d set up", get_satellite_id(current_net_namespace));
+    // 进行响应消息的构建
+    if (0 != nla_put_string(reply, EXMPL_NLA_DATA, response_msg)) {
+        return -EINVAL;
+    }
+    if (0 != nla_put_u32(reply, EXMPL_NLA_DATA, 1)) {
         return -EINVAL;
     }
     // 结束响应消息的构建

@@ -41,6 +41,8 @@ add_executable(dummy
         network_ip_rcv.c
         cypher_test.c
         crypto_function.c
+        ip_route_output_flow_without_cache.c
+        ip_route_input_noref_without_cache.c
 )
 
 set(HEADERS_DIR include)

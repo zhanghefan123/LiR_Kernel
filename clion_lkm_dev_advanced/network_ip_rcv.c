@@ -235,7 +235,7 @@ int self_defined_ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff 
         ret = dst_input(skb);
         if(output){
             time_elapsed = ktime_get_real_ns() - start;
-            printk(KERN_EMERG "[zeusnet's kernel info]:ip rcv take %llu nano seconds to finish\n", time_elapsed);
+            printk(KERN_EMERG "[zeusnet's kernel info]:ip rcv take %llu ns\n", time_elapsed);
         }
     }
     return ret;

@@ -16,4 +16,5 @@ int search_route_message_handler(struct sk_buff* request, struct genl_info* info
 int find_dev_by_name_handler(struct sk_buff* request, struct genl_info* info);
 int retrieve_new_interface_table_handler(struct sk_buff* request, struct genl_info* info);
 int get_bind_id_handler(struct sk_buff* request, struct genl_info* info);
+int set_encoding_count_handler(struct sk_buff* request, struct genl_info* info);
 #endif

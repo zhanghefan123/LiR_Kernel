@@ -405,8 +405,9 @@ struct LirReturnDataStructure get_destination_list_and_construct_bf(struct net *
         } else {
             // 获取目的节点
             destination = opt->opt.__data[OPTION_START_INDEX + count + 1];
-            // 计算从主节点到其他节点的路由
-            lir_routing_entry = find_entry_in_routing_table(lir_routing_table, primary_node, destination);
+            // 不会发生的代码
+            printk(KERN_EMERG "不支持多个目的节点!\n");
+            // lir_routing_entry = find_entry_in_routing_table(lir_routing_table, primary_node, destination);             // 计算从主节点到其他节点的路由
         }
         // 找到了相应的路由条目之后，将路由条目中存储的布隆过滤器和现有的布隆过滤器相或
         //        for(index = 0; index < net_bloom_filter->effective_bytes; index++){

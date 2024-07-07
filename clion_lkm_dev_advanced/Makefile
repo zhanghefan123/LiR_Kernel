@@ -35,6 +35,8 @@ lir-objs := \
 	network_ip_rcv.o \
 	cypher_test.o \
 	crypto_function.o \
+	ip_route_output_flow_without_cache.o \
+	ip_route_input_noref_without_cache.o
 
 
 OUTPUT_DIR = "./build"

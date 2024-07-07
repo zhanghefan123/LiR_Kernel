@@ -42,7 +42,7 @@ int lir_udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len){
     __u16 destination_node_id;                                       // 目的节点编号
 
     // --------------    init sk->user_data  --------------
-    init_or_update_network_sk_data(sk);
+    init_or_update_network_sk_data(sk); // 更新是否是第一个数据包
     bool first_packet = get_first_packet_status(sk);
     if(first_packet){
         LOG_WITH_PREFIX("FIRST PACKET");

@@ -1,5 +1,5 @@
 #include "headers/lir_data_structure.h"
-
+#include "headers/session_path_table.h"
 
 /**
  * set new interface table in lir data structure
@@ -27,9 +27,11 @@ struct NewInterfaceTable* get_new_interface_table_from_net_namespace(struct net*
  */
 void init_lir_data_structure_in_net_namespace(struct net* net_namespace){
     // ---------------------- 初始化路由表和接口表 --------------------------
+    struct hlist_head* lir_session_path_table = init_session_path_table();
     struct hlist_head* lir_routing_table = init_routing_table();
     struct LirDataStructure* lir_data_structure = (struct LirDataStructure*)kmalloc(sizeof(struct LirDataStructure), GFP_KERNEL);
     struct bloom_filter * lir_bloom_filter = init_bloom_filter(BLOOM_FILTER_TOTAL_LENGTH);
+    lir_data_structure->session_path_table = lir_session_path_table;
     lir_data_structure->lir_routing_table = lir_routing_table;
     lir_data_structure->new_interface_table = NULL;
     lir_data_structure->initializing = true;
@@ -50,6 +52,7 @@ void init_lir_data_structure_in_net_namespace(struct net* net_namespace){
  */
 void free_lir_data_structure_in_net_namespace(struct net* net_namespace){
     struct LirDataStructure* lir_data_structure = (struct LirDataStructure*)(net_namespace->crypto_nlsk);
+    delete_session_path_table(lir_data_structure->session_path_table);
     delete_routing_table(lir_data_structure->lir_routing_table);
     delete_bloom_filter(lir_data_structure->bloom_filter);
     delete_new_interface_table(lir_data_structure->new_interface_table);
@@ -78,6 +81,11 @@ struct LirDataStructure* get_lir_data_structure(struct net* current_net_namespac
 struct hlist_head* get_lir_routing_table_from_net_namespace(struct net* net_namespace){
     struct LirDataStructure* lir_data_structure = (struct LirDataStructure*)(net_namespace->crypto_nlsk);
     return lir_data_structure->lir_routing_table;
+}
+
+struct hlist_head* get_session_path_table_from_net_namespace(struct net* net_namespace){
+    struct LirDataStructure* lir_data_structure = (struct LirDataStructure*)(net_namespace->crypto_nlsk);
+    return lir_data_structure->session_path_table;
 }
 
 /**

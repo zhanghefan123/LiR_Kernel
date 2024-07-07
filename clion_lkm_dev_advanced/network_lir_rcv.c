@@ -12,6 +12,7 @@
 #include "headers/mac_lir_ip_output.h"
 #include "headers/transport_lir_udp_rcv.h"
 #include "headers/network_ip_rcv.h"
+#include "headers/lir_routing_table_structure.h"
 
 asmlinkage int (*orig_tcp_v4_rcv)(struct sk_buff *skb);
 extern asmlinkage int (*orig_ip_rcv)(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev);
@@ -353,14 +354,15 @@ struct sk_buff* lir_rcv_core(struct sk_buff* skb, struct net* net){
 
     lir_header = lir_hdr(skb);
 
-    // -----------------   检查校验和  ------------------
-    if(!check_checksum(lir_header)){
-//        LOG_WITH_PREFIX("check sum error");
-        goto csum_error;
-    }
-//    else {
-//        LOG_WITH_PREFIX("check sum not error");
-//    }
+    // -----------------   检查校验和 50~60ns ------------------
+    //    u64 start = ktime_get_real_ns();
+    //    if(!check_checksum(lir_header)){
+    //        printk(KERN_EMERG "checksum error\n");
+    //        goto csum_error;
+    //    }
+    //    u64 time_elapsed = ktime_get_real_ns() - start;
+    //    printk(KERN_EMERG "CheckSum Time elapsed %llu ns \n", time_elapsed);
+
     // -----------------   检查校验和  ------------------
 
     // -----------------   安全的检查  ------------------
@@ -419,9 +421,13 @@ int lir_rcv_finish(struct net* net, struct sk_buff *skb, u64 start){
     int ret;
     ret = lir_rcv_finish_core(net, skb, dev);
     time_elapsed = ktime_get_real_ns() - start;
-    if (ret != NET_RX_DROP){
+    if (ret == NET_RX_SUCCESS){
         ret = lir_local_deliver(skb);
-        printk(KERN_EMERG "local deliver\n");
+    } else if (ret == NET_RX_REENCODING_FORWARD) {
+        printk(KERN_EMERG "LiR Reencoding Forward Time Consumption: %llu ns\n", time_elapsed);
+    }
+    else {
+        printk(KERN_EMERG "LiR Direct Forward Time Consumption: %llu ns\n", time_elapsed);
     }
     return ret;
 }
@@ -441,122 +447,68 @@ int lir_rcv_finish_core(struct net *net, struct sk_buff *skb, struct net_device 
 }
 
 int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
-    // opt 数据部分
-    u8 * opt_data_pointer;
-    // lir 头指针
-    const struct lirhdr *lir_header;
-    // net 之中存储的布隆过滤器
-    struct bloom_filter *net_bloom_filter = get_bloom_filter(current_net_namespace);
-    // 索引
-    int index;
-    // 我们需要注意的是 net_bloom_filter->bitset 之中存储的是指向一个堆的指针，我们不能让这个指针指向的空间丢掉，所以提前存储一下
-    unsigned long* bloom_filter_bitset;
-    // 拿到接口表
-    struct NewInterfaceTable* new_interface_table = get_new_interface_table_from_net_namespace(current_net_namespace);
-    // 数据包的目的卫星编号
-    __u16 destination_node_id;
-    // 当前卫星 id
-    int current_satellite_id = get_satellite_id(current_net_namespace);
-    // 获取 lir 头
-    lir_header = lir_hdr(skb);
-    // 获取目的卫星编号
-    destination_node_id = ntohs(lir_header->destination);
-    // 获取 opt 数据部分, 注意这里由于没有调用 ip_options_build 所以我们不能使用 opt->__data。
-    opt_data_pointer = (u8 *) &(lir_header[1]);
-    // 将 option 字段的内容进行拷贝
-    bloom_filter_bitset = net_bloom_filter->bitset;
-    net_bloom_filter->bitset = (unsigned long*)(opt_data_pointer); // 不能删除
+    // 1. 重新封装节点消耗的时间
+    //    1. 根据数据包内的目的节点查找路由条目 (快速)
+    //    2. 重置布隆过滤器 (快速)
+    //    3. 插入指定数量的链路标识 (快速)
+    //    4. 将数据包转出 (耗时)
+
+    // 2. 直接转发节点消耗的时间
+    //    1. 重建布隆过滤器 (快速)
+    //    2. 遍历转发表，判断每一个表项中的链路标识是否被封装在布隆过滤器之中 (快速)
+    //    3. 如果是的话，不能直接将收到的数据包转出，而需要利用 skb_clone 将数据包拷贝一份 (耗时)，再将数据包从特定接口转发出去，因为可能有多个出接口。
+    //    4. 当遍历转发表完成之后, 需要将 skb 删除。(耗时)
+    //    (3,4) 是导致转发节点超过重新封装节点的原因
+    int index;  // 索引
+    struct lirhdr *lir_header = lir_hdr(skb); // 获取 lir 头
+    struct LirDataStructure* lir_data_structure = (struct LirDataStructure*)(current_net_namespace->crypto_nlsk); // 获取自定义数据结构
+    struct bloom_filter *net_bloom_filter = lir_data_structure->bloom_filter; // 从自定义数据结构中拿到布隆过滤器
+    unsigned long* bloom_filter_bitset; // 我们需要注意的是 net_bloom_filter->bitset 之中存储的是指向一个堆的指针，我们不能让这个指针指向的空间丢掉，所以提前存储一下
+    struct NewInterfaceTable* new_interface_table = lir_data_structure->new_interface_table; // 拿到接口表
+    int intermediate_satellite_id = lir_header->intermediate;
+    u8 * opt_data_pointer = (u8 *) &(lir_header[1]); // opt 数据部分
+    bloom_filter_bitset = net_bloom_filter->bitset;  // 将 option 字段的内容进行拷贝 // 不能删除
+    net_bloom_filter->bitset = (unsigned long*)(opt_data_pointer);
+    bool local_deliver = (lir_data_structure->satellite_id == lir_header->destination);
+    if(local_deliver){
+        net_bloom_filter->bitset = bloom_filter_bitset;
+        return NET_RX_SUCCESS;
+    }
     // --------------------------------------------- 现在的实现方式 -- 使用新的接口表 ---------------------------------------------
-    // 卫星仅仅可能存在四个接口
-    for(index = 0; index < new_interface_table->number_of_interfaces; index++){
-        struct NewInterfaceEntry new_interface_entry = new_interface_table->interface_entry_array[index];
-        if(0 == check_element_in_bloom_filter(net_bloom_filter, &(new_interface_entry.link_identifier), sizeof(int))){
-            if(dev->ifindex == new_interface_entry.interface->ifindex){
-                continue;
-            } else {
-                skb_get(skb);
-                lir_packet_forward(skb, new_interface_entry.interface, current_net_namespace);
+    if(intermediate_satellite_id == lir_data_structure->satellite_id) {
+        // route and deliver
+        int encoding_count = get_encoding_count(current_net_namespace);
+        struct RoutingTableEntry *routing_table_entry = find_entry_in_routing_table(
+                lir_data_structure->lir_routing_table,
+                lir_data_structure->satellite_id,
+                lir_header->destination);
+        reset_bloom_filter(net_bloom_filter);
+        for (index = 0; (index < encoding_count) && (index < routing_table_entry->length_of_path); index++) {
+            push_element_into_bloom_filter(net_bloom_filter, &(routing_table_entry->link_identifiers[index]), sizeof(int));
+        }
+        lir_header->intermediate = routing_table_entry->node_ids[index - 1];
+        net_bloom_filter->bitset = bloom_filter_bitset;
+        lir_send_check(lir_header);
+        lir_packet_forward(skb, routing_table_entry->output_interface, current_net_namespace);
+        return NET_RX_REENCODING_FORWARD;
+    }
+    // direct forward or local deliver
+    else {
+        for(index = 0; index < new_interface_table->number_of_interfaces; index++){
+            struct NewInterfaceEntry new_interface_entry = new_interface_table->interface_entry_array[index];
+            if(0 == check_element_in_bloom_filter(net_bloom_filter, &(new_interface_entry.link_identifier), sizeof(int))){
+                if(dev->ifindex == new_interface_entry.interface->ifindex){
+                    continue;
+                } else {
+                    lir_packet_forward(skb, new_interface_entry.interface, current_net_namespace);
+                }
             }
         }
-    }
-    // 将 net_bloom_filter->bitset 还原,以便进行后续的销毁
-    net_bloom_filter->bitset = bloom_filter_bitset; // 不能删除
-    // 不管 forward_count 是 0 是 1 还是大于 1 都需要经过这里的判断，判断是否要上交
-    bool local_deliver = (current_satellite_id == destination_node_id);
-    if(local_deliver){
-        return NET_RX_SUCCESS;
-    } else {
-        kfree_skb(skb);
+        net_bloom_filter->bitset = bloom_filter_bitset; // 不能删除 // 将 net_bloom_filter->bitset 还原,以便进行后续的销毁
+        //        kfree_skb(skb);
         return NET_RX_DROP;
     }
 }
-
-//int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
-//    // opt 数据部分
-//    u8 * opt_data_pointer;
-//    // lir 头指针
-//    const struct lirhdr *lir_header;
-//    // net 之中存储的布隆过滤器
-//    struct bloom_filter *net_bloom_filter = get_bloom_filter(current_net_namespace);
-//    // 克隆一个新的数据包
-//    struct sk_buff* skb_new;
-//    // 索引
-//    int index;
-//    // 我们需要注意的是 net_bloom_filter->bitset 之中存储的是指向一个堆的指针，我们不能让这个指针指向的空间丢掉，所以提前存储一下
-//    unsigned long* bloom_filter_bitset;
-//    // 拿到接口表
-//    struct NewInterfaceTable* new_interface_table = get_new_interface_table_from_net_namespace(current_net_namespace);
-//    // 数据包的目的卫星编号
-//    __u16 destination_node_id;
-//    // 当前卫星 id
-//    int current_satellite_id = get_satellite_id(current_net_namespace);
-//    // 获取 lir 头
-//    lir_header = lir_hdr(skb);
-//    // 获取目的卫星编号
-//    destination_node_id = ntohs(lir_header->destination);
-//    // 获取 opt 数据部分, 注意这里由于没有调用 ip_options_build 所以我们不能使用 opt->__data。
-//    opt_data_pointer = (u8 *) &(lir_header[1]);
-//    // 将 option 字段的内容进行拷贝
-//    bloom_filter_bitset = net_bloom_filter->bitset;
-//    net_bloom_filter->bitset = (unsigned long*)(opt_data_pointer); // 不能删除
-//    // --------------------------------------------- 现在的实现方式 -- 使用新的接口表 ---------------------------------------------
-//    // 卫星仅仅可能存在四个接口
-//    struct net_device* net_devices[4];
-//    int forward_count = 0;
-//    for(index = 0; index < new_interface_table->number_of_interfaces; index++){
-//        struct NewInterfaceEntry new_interface_entry = new_interface_table->interface_entry_array[index];
-//        if(0 == check_element_in_bloom_filter(net_bloom_filter, &(new_interface_entry.link_identifier), sizeof(int))){
-//            if(dev->ifindex == new_interface_entry.interface->ifindex){
-//                continue;
-//            } else {
-//                // set forward interface
-//                net_devices[forward_count] = new_interface_entry.interface;
-//                forward_count++;
-//            }
-//        }
-//    }
-//    // 将 net_bloom_filter->bitset 还原,以便进行后续的销毁
-//    net_bloom_filter->bitset = bloom_filter_bitset; // 不能删除
-//    if (forward_count == 1) {
-//        skb_get(skb);
-//        lir_packet_forward(skb, net_devices[0], current_net_namespace); // 让上层去判断是否这个包需要接受
-//    } else if (forward_count > 1) {
-//        int index_inner;
-//        for(index_inner = 0; index_inner < forward_count; index_inner++){
-//            skb_new = skb_clone(skb, GFP_KERNEL);
-//            // 如果要转发数据包，那么迅速将当前数据包转发出去
-//            lir_packet_forward(skb_new, net_devices[index_inner], current_net_namespace);
-//        }
-//    }
-//    // 不管 forward_count 是 0 是 1 还是大于 1 都需要经过这里的判断，判断是否要上交
-//    bool local_deliver = (current_satellite_id == destination_node_id);
-//    if(local_deliver){
-//        return NET_RX_SUCCESS;
-//    } else {
-//        kfree_skb(skb);
-//        return NET_RX_DROP;
-//    }
-//}
 
 /**
  * 向上层进行交付
@@ -693,12 +645,10 @@ int lir_defrag(struct net *net, struct sk_buff *skb, u32 user){
  */
 int lir_packet_forward(struct sk_buff* skb, struct net_device* output_dev, struct net* current_net_namespace){
     u32 mtu;
-    struct lirhdr *lir_header;	/* Our header */
     struct sock* sk = NULL;
     SKB_DR(reason);
     mtu = READ_ONCE(output_dev->mtu);  // set mtu
     skb_cow(skb, LL_RESERVED_SPACE(output_dev)+0);
-    lir_header = lir_hdr(skb);
     // -------------------------------------------------
 
     // ------------- we current not modify the option so we don't need to update -------------

@@ -69,7 +69,7 @@ void free_crypto_data_structure(struct shash_desc* hmac_data_structure){
 // return the heap memory / remember to release
 unsigned char* calculate_hmac(struct shash_desc* hmac_data_structure, unsigned char* data, int length_of_data, char* key){
     unsigned char hmac_output[HMAC_OUTPUT_LENGTH_IN_BYTES];
-    unsigned char* real_output = (unsigned char*)(kmalloc(sizeof(unsigned char) * ICING_VALIDATION_SIZE_IN_BYTES, GFP_KERNEL));
+    unsigned char* real_output = (unsigned char*)(kmalloc(sizeof(unsigned char) * OPT_VALIDATION_SIZE_IN_BYTES, GFP_KERNEL));
     // set key in hmac
     if (crypto_shash_setkey(hmac_data_structure->tfm, key, strlen(key))) {
         printk(KERN_ERR "Failed to set key.\n");
@@ -85,7 +85,7 @@ unsigned char* calculate_hmac(struct shash_desc* hmac_data_structure, unsigned c
         return NULL;
     }
     // copy hmac_output to real_output
-    memcpy(real_output, hmac_output, sizeof(unsigned char) * ICING_VALIDATION_SIZE_IN_BYTES);
+    memcpy(real_output, hmac_output, sizeof(unsigned char) * OPT_VALIDATION_SIZE_IN_BYTES);
     return real_output;
 }
 

@@ -29,7 +29,8 @@ enum {
     CMD_SET_BLOOM_FILTER_ATTRS,
     CMD_CONSTRUCT_NEW_INTERFACE_TABLE,
     CMD_RETRIEVE_NEW_INTERFACE_TABLE,
-    CMD_GET_BIND_ID
+    CMD_GET_BIND_ID,
+    CMD_SET_ENCODING_COUNT
 };
 #define VERSION_NR 1
 extern struct genl_family exmpl_genl_family;

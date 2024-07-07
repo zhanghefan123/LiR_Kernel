@@ -12,6 +12,7 @@
 #include "headers/mac_lir_ip_output.h"
 #include "headers/transport_lir_udp_rcv.h"
 #include "headers/network_ip_rcv.h"
+#include "headers/session_path_table.h"
 
 asmlinkage int (*orig_tcp_v4_rcv)(struct sk_buff *skb);
 
@@ -550,55 +551,128 @@ int lir_rcv_finish_core(struct net *net, struct sk_buff *skb, struct net_device 
 //    kfree(static_fields_hash);
 //}
 
-void print_first_lir_packet(struct net* current_net_namespace,
-                            unsigned char* extension_header_start,
+void print_first_lir_packet(struct net *current_net_namespace,
+                            unsigned char *extension_header_start,
                             int extension_header_length,
                             int path_length,
-                            struct single_hop_field* path){
+                            struct single_hop_field *path) {
     int index;
-    struct shash_desc* hash_data_structure = get_hash_data_structure(current_net_namespace);
+    struct shash_desc *hash_data_structure = get_hash_data_structure(current_net_namespace);
     LOG_WITH_EDGE("RECEIVED FIRST OPT PACKET");
-    unsigned char* path_hash = calculate_fixed_length_hash(hash_data_structure, extension_header_start, extension_header_length);
+    unsigned char *path_hash = calculate_fixed_length_hash(hash_data_structure, extension_header_start,
+                                                           extension_header_length);
     print_hash_or_hmac_result(path_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
     kfree(path_hash);
     printk(KERN_EMERG "path length = %d\n", path_length);
-    for(index = 0; index < path_length + 1; index++){
+    for (index = 0; index < path_length + 1; index++) {
         printk(KERN_EMERG "[node id %d link identifier %d]\n", path[index].node_id, path[index].link_identifier);
     }
     LOG_WITH_EDGE("RECEIVED FIRST OPT PACKET");
 }
 
-int forward_and_deliver_skb(struct sk_buff* skb, struct net* current_net_namespace){
+struct net_device *
+store_in_session_path_table(struct hlist_head *session_path_table, struct NewInterfaceTable *new_interface_table,
+                            struct single_hop_field *path,
+                            int length_of_path, int current_index,
+                            int source, int destination, int current_satellite_id) {
     int index;
-    struct lirhdr* lir_header = lir_hdr(skb);
-    unsigned char* extension_header_start = (unsigned char*)(&lir_header[1]);
-    struct length_of_path* length_of_path_struct = (struct length_of_path*)(extension_header_start);
-    struct single_hop_field* path = (struct single_hop_field*)(extension_header_start + sizeof(struct length_of_path));
+    //    int count;
+    //    char final_output_message[200];
+    //    char single_item[20];
+    struct net_device *output_dev;
+    struct SessionPathTableEntry *session_path_table_entry = init_session_table_entry();
+    session_path_table_entry->source_id = source;
+    session_path_table_entry->destination_id = destination;
+    session_path_table_entry->current_index = current_index - 1;
+    // ------------------------------- get upstream nodes --------------------------------
+    //    sprintf(final_output_message, "upstream nodes: ");
+    //    session_path_table_entry->upstream_node_count = current_index;
+    //    if (session_path_table_entry->upstream_node_count > 0) {
+    //        session_path_table_entry->upstream_nodes = (int *) kmalloc(
+    //                sizeof(int) * session_path_table_entry->upstream_node_count, GFP_KERNEL);
+    //    }
+    //    for (index = 0; index < current_index; index++) {
+    //        session_path_table_entry->upstream_nodes[index] = path[index].node_id;
+    //        sprintf(single_item, "(%d)->", path[index].node_id);
+    //        strcat(final_output_message, single_item);
+    //    }
+    // ------------------------------- get upstream nodes --------------------------------
+    // -------------------------------- get downstream nodes --------------------------------
+    //    strcat(final_output_message, "downstream nodes: ");
+    //    session_path_table_entry->downstream_node_count = length_of_path - current_index;
+    //    if (session_path_table_entry->downstream_node_count > 0) {
+    //        session_path_table_entry->downstream_nodes = (int *) kmalloc(
+    //                sizeof(int) * session_path_table_entry->downstream_node_count, GFP_KERNEL);
+    //    }
+    //    count = 0;
+    //    for (index = current_index + 1; index < length_of_path + 1; index++) {
+    //        session_path_table_entry->downstream_nodes[count] = path[index].node_id;
+    //        sprintf(single_item, "(%d)->", path[index].node_id);
+    //        strcat(final_output_message, single_item);
+    //        count++;
+    //    }
+    // ------------------------------- get downstream nodes --------------------------------
+    // -------------------------------- get encrypt sequence -------------------------------
+    bool is_destination = (current_satellite_id == destination);
+    if (is_destination) {
+        session_path_table_entry->encrypt_order = (int *) (kmalloc(sizeof(int) * length_of_path, GFP_KERNEL));
+        session_path_table_entry->encrypt_order[0] = destination;
+        // when length of path = 3
+        // index = 1 index = 2 ----corresponding to----> B C
+        session_path_table_entry->encrypt_length = length_of_path;
+        for (index = 1; index < length_of_path; index++) {
+            session_path_table_entry->encrypt_order[index] = path[index].node_id;
+        }
+    }
+    // -------------------------------- get encrypt sequence -------------------------------
+
+    // -------------------------------- get network device ---------------------------------
+    int current_link_identifier = path[current_index].link_identifier;
+    for (index = 0; index < new_interface_table->number_of_interfaces; index++) {
+        struct NewInterfaceEntry new_interface_entry = new_interface_table->interface_entry_array[index];
+        int entry_corresponding_link_identifier = new_interface_entry.link_identifier;
+        if (entry_corresponding_link_identifier == current_link_identifier) {
+            output_dev = new_interface_entry.interface;
+        }
+    }
+    // -------------------------------- get network device ---------------------------------
+    // -------------------------------- insert the entry -----------------------------------
+    session_path_table_entry->output_device = output_dev;
+    add_entry_into_session_table(session_path_table, session_path_table_entry);
+    // -------------------------------- insert the entry -----------------------------------
+    //    LOG_WITH_PREFIX(final_output_message);
+    return output_dev;
+}
+
+int forward_and_deliver_first_skb(struct sk_buff *skb, struct net *current_net_namespace) {
+    struct lirhdr *lir_header = lir_hdr(skb);
+    unsigned char *extension_header_start = (unsigned char *) (&lir_header[1]);
+    struct length_of_path *length_of_path_struct = (struct length_of_path *) (extension_header_start);
+    struct single_hop_field *path = (struct single_hop_field *) (extension_header_start +
+                                                                 sizeof(struct length_of_path));
     struct NewInterfaceTable *new_interface_table = get_new_interface_table_from_net_namespace(current_net_namespace);
+    struct hlist_head *session_path_table = get_session_path_table_from_net_namespace(current_net_namespace);
+    struct net_device *output_dev;
     __u16 total_header_length = ntohs(lir_header->header_len);
-    int extension_header_length = total_header_length - (int)(sizeof(struct lirhdr));
+    int extension_header_length = total_header_length - (int) (sizeof(struct lirhdr));
     int path_length = length_of_path_struct->length_of_path;
     int current_path_index = ntohs(lir_header->current_path_index);
     int current_satellite_id = get_satellite_id(current_net_namespace);
+    int source_satellite_id = ntohs(lir_header->source);
     int destination_satellite_id = ntohs(lir_header->destination);
     // -------------------------------- PRINT PATH --------------------------------
     print_first_lir_packet(current_net_namespace, extension_header_start, extension_header_length, path_length, path);
+    output_dev = store_in_session_path_table(session_path_table, new_interface_table,
+                                             path, path_length, current_path_index,
+                                             source_satellite_id, destination_satellite_id, current_satellite_id);
     // -------------------------------- PRINT PATH --------------------------------
     bool local_deliver = (destination_satellite_id == current_satellite_id);
-    if(local_deliver){
+    if (local_deliver) {
         return NET_RX_SUCCESS;
     } else {
-        // have not reach destination
-        int current_link_identifier = path[current_path_index].link_identifier;
-        for (index = 0; index < new_interface_table->number_of_interfaces; index++) {
-            struct NewInterfaceEntry new_interface_entry = new_interface_table->interface_entry_array[index];
-            int entry_corresponding_link_identifier = new_interface_entry.link_identifier;
-            if (entry_corresponding_link_identifier == current_link_identifier) {
-                lir_header->current_path_index = htons(current_path_index + 1);
-                lir_packet_forward(skb, new_interface_entry.interface, current_net_namespace);
-                printk(KERN_EMERG "The packet should be forwarded from %s\n", new_interface_entry.interface->name);
-            }
-        }
+        lir_header->current_path_index = htons(current_path_index + 1);
+        lir_packet_forward(skb, output_dev, current_net_namespace);
+        printk(KERN_EMERG "The packet should be forwarded from %s\n", output_dev->name);
         return NET_RX_DROP;
     }
 }
@@ -610,11 +684,11 @@ int forward_and_deliver_skb(struct sk_buff* skb, struct net* current_net_namespa
  * @param dev 入接口
  * @return
  */
-int handle_first_opt_packet(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev){
+int handle_first_opt_packet(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
     // ----------------   log the packet  ----------------
     LOG_WITH_PREFIX("RECEIVED FIRST LIR PACKET");
     // ----------------   log the packet  ----------------
-    return forward_and_deliver_skb(skb, current_net_namespace);
+    return forward_and_deliver_first_skb(skb, current_net_namespace);
 }
 
 /**
@@ -624,79 +698,105 @@ int handle_first_opt_packet(struct net *current_net_namespace, struct sk_buff *s
  * @param dev 入接口
  * @return
  */
-int handle_other_opt_packets(struct net* current_net_namespace, struct sk_buff* skb, struct net_device* dev){
-    kfree_skb(skb);
-    return NET_RX_DROP;
+int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
+    int index;
+    struct lirhdr *lir_header = lir_hdr(skb);  // 拿到 lir header
+    int source = ntohs(lir_header->source);  // 拿到包的 source
+    int destination = ntohs(lir_header->destination);  // 拿到包的 destination
+    unsigned char *pvf_pointer = (unsigned char *) &lir_header[1];  // 拿到指向 pvf 的指针
+    unsigned char *ovfs_pointer = pvf_pointer + sizeof(struct path_validation_field);  // 拿到指向 ovf 数组的指针
+    struct path_validation_field *pvf = (struct path_validation_field *) pvf_pointer;
+    struct origin_validation_field *ovfs = (struct origin_validation_field *) ovfs_pointer;
+    struct hlist_head *session_path_table = get_session_path_table_from_net_namespace(current_net_namespace); // 获取会话路径表
+    struct SessionPathTableEntry *session_path_table_entry = find_entry_in_session_path_table(session_path_table,
+                                                                                              source,
+                                                                                              destination);  // 通过源和目的进行表项的获取
+    if (session_path_table_entry) { // 如果找到了路由表项
+        // -------------------------------------------------- ovf 字段验证 --------------------------------------------------
+        int current_satellite_id = get_satellite_id(current_net_namespace); // 拿到当前卫星的 id
+        unsigned char *static_fields_hash = calculate_static_fields_hash_of_lir(lir_header,
+                                                                                current_net_namespace);  // 计算静态哈希
+        struct shash_desc *hmac_data_structure = get_hmac_data_structure(current_net_namespace); // 计算 hmac_data
+        unsigned char *hmac_result;  // 计算 hmac_result
+        int current_index = session_path_table_entry->current_index;  // 需要验证的 ovf 的索引
+        char key_from_source_to_current[20];
+        sprintf(key_from_source_to_current, "key-%d-%d", source, current_satellite_id);
+        hmac_result = calculate_hmac(hmac_data_structure,
+                                     static_fields_hash,
+                                     HASH_OUTPUT_LENGTH_IN_BYTES,
+                                     key_from_source_to_current);
+        bool same = COMPARE_MEMORY((unsigned char *) (&ovfs[current_index]), hmac_result, OPT_VALIDATION_SIZE_IN_BYTES);
+        if (same) {
+            kfree(hmac_result); // 释放 hmac
+            LOG_WITH_PREFIX("VALIDATION PASSED");
+        } else {
+            LOG_WITH_PREFIX("VALIDATION NOT PASSED");
+            kfree(hmac_result);
+            kfree(static_fields_hash);
+            kfree_skb(skb);
+            return NET_RX_DROP;
+        }
+        // -------------------------------------------------- ovf 字段验证 --------------------------------------------------
+        bool local_deliver = (session_path_table_entry->destination_id == current_satellite_id);
+        if (local_deliver) {
+            // 进行还原 A->B->C->D 则加密的顺序为 KD KB KC
+            // 打印加密的顺序
+            unsigned char temp_result[OPT_VALIDATION_SIZE_IN_BYTES];
+            unsigned char *hmac_result_new;
+            for (index = 0; index < session_path_table_entry->encrypt_length; index++) {
+                char key[20];
+                sprintf(key, "key-%d-%d", session_path_table_entry->source_id,
+                        session_path_table_entry->encrypt_order[index]);
+                if (index == 0) {
+                    hmac_result_new = calculate_hmac(hmac_data_structure,
+                                                     static_fields_hash,
+                                                     HASH_OUTPUT_LENGTH_IN_BYTES,
+                                                     key);
+                    memcpy(temp_result, hmac_result_new, OPT_VALIDATION_SIZE_IN_BYTES);
+                    kfree(hmac_result);
+                } else {
+                    hmac_result_new = calculate_hmac(hmac_data_structure,
+                                                     temp_result,
+                                                     OPT_VALIDATION_SIZE_IN_BYTES,
+                                                     key);
+                    memcpy(temp_result, hmac_result_new, OPT_VALIDATION_SIZE_IN_BYTES);
+                    kfree(hmac_result_new);
+                }
+            }
+            print_hash_or_hmac_result(temp_result, OPT_VALIDATION_SIZE_IN_BYTES);
+            print_hash_or_hmac_result(pvf_pointer, OPT_VALIDATION_SIZE_IN_BYTES);
+            kfree(static_fields_hash);
+            return NET_RX_SUCCESS;
+        } else {
+            // -------------------------------------------------- pvf 字段更新 --------------------------------------------------
+            unsigned char *pvf_hmac_result = calculate_hmac(hmac_data_structure,
+                                                            pvf_pointer,
+                                                            sizeof(struct path_validation_field),
+                                                            key_from_source_to_current);
+            memcpy(pvf_pointer, pvf_hmac_result, sizeof(struct path_validation_field));
+            kfree(pvf_hmac_result);
+            // -------------------------------------------------- pvf 字段更新 --------------------------------------------------
+            lir_packet_forward(skb, session_path_table_entry->output_device, current_net_namespace);
+            printk(KERN_EMERG "The packet should be forwarded from %s\n",
+                   session_path_table_entry->output_device->name);
+            kfree(static_fields_hash);
+            return NET_RX_DROP;
+        }
+    } else {  // 如果没有找到路由表项
+        LOG_WITH_PREFIX("cannot find session table entry");
+        kfree_skb(skb);
+        return NET_RX_DROP;
+    }
 }
 
-int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
+int
+lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
     bool first_packet = TEST_IF_FIRST_OPT_PACKET(skb);
-    if(first_packet){
+    if (first_packet) {
         return handle_first_opt_packet(current_net_namespace, skb, dev);
     } else {
         return handle_other_opt_packets(current_net_namespace, skb, dev);
     }
-//    struct lirhdr *lir_header = lir_hdr(skb);                     // get lir header
-//    int current_path_index = ntohs(lir_header->current_path_index);            // get current index
-//    int length_of_path = ntohs(lir_header->length_of_path);             // length of path
-//    struct NewInterfaceTable *new_interface_table = get_new_interface_table_from_net_namespace(current_net_namespace);
-//    unsigned char *extension_header_for_icing = (unsigned char *) &(lir_header[1]);
-//    struct single_hop_icing *icing_path = (struct single_hop_icing *) (extension_header_for_icing);
-//    unsigned char *extension_header_for_validation_list = (unsigned char *) (extension_header_for_icing +
-//                                                                             sizeof(struct single_hop_icing) *
-//                                                                             length_of_path);
-//    struct single_node_validation_icing *validation_list = (struct single_node_validation_icing *) (extension_header_for_validation_list);
-//    __u32 current_link_identifier = icing_path[current_path_index].tag;
-//    int current_satellite_id = get_satellite_id(current_net_namespace);
-//    int source_satellite_id = ntohs(lir_header->source);
-//    // =========================  find previous node sequence=========================
-//    print_upstream_node_sequence(icing_path, current_path_index, source_satellite_id);
-//    // =========================  find previous node sequence=========================
-//
-//    // ========================  find downstream node sequence========================
-//    print_downstream_node_sequence(icing_path, current_path_index, length_of_path);
-//    // ========================  find downstream node sequence========================
-//
-//    // ========================  validate the packet ========================
-//    bool packet_validation_result = validate_packet(lir_header, icing_path,
-//                                                    validation_list, current_path_index,
-//                                                    current_net_namespace, source_satellite_id,
-//                                                    current_satellite_id);
-//    // ========================  validate the packet ========================
-//    // ======================== update the validation field =======================
-//    if(!packet_validation_result){
-//        kfree_skb(skb);
-//        return NET_RX_DROP;
-//    } else {
-//        update_validation_fields(lir_header, icing_path,
-//                                 validation_list, current_path_index,
-//                                 current_satellite_id, current_net_namespace,
-//                                 length_of_path);
-//    }
-//    // ======================== update the validation field =======================
-//
-//    // ================== traverse the interface entry in interface table ==================
-//    int index;
-//    for (index = 0; index < new_interface_table->number_of_interfaces; index++) {
-//        struct NewInterfaceEntry new_interface_entry = new_interface_table->interface_entry_array[index];
-//        int entry_corresponding_link_identifier = new_interface_entry.link_identifier;
-//        if (entry_corresponding_link_identifier == current_link_identifier) {
-//            lir_header->current_path_index = htons(current_path_index + 1);
-//            lir_packet_forward(skb, new_interface_entry.interface, current_net_namespace);
-//            printk(KERN_EMERG "The packet should be forwarded from %s\n", new_interface_entry.interface->name);
-//        }
-//    }
-//    // ================== traverse the interface entry in interface table ==================
-//    // ================== judge if local deliver ==================
-//    printk(KERN_EMERG "current_path_index:%d length_of_path: %d", current_path_index, length_of_path);
-//    bool local_deliver = (current_path_index == (length_of_path - 1));
-//    if (local_deliver) {
-//        printk(KERN_EMERG "The packet should be local delivered in current satellite with satellite id %d\n",
-//               current_satellite_id);
-//        return NET_RX_SUCCESS;
-//    } else {
-//        return NET_RX_DROP;
-//    }
 }
 
 /**

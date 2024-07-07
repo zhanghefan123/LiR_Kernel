@@ -1,3 +1,3 @@
-sudo rmmod lir
+sudo rmmod bpt
 make
-sudo insmod lir.ko
+sudo insmod bpt.ko

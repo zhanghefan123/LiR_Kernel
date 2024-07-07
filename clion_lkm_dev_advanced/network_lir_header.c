@@ -14,8 +14,8 @@ void PRINT_LIR_HEADER(struct lirhdr* lir_header){
     __u16 header_length = ntohs(lir_header->header_len);
     __u16 total_length = ntohs(lir_header->total_len);
     __u16 option_field_length = header_length - sizeof(struct lirhdr);
-    __u16 source = ntohs(lir_header->source);
-    __u16 destination = ntohs(lir_header->destination);
+    __u16 source = lir_header->source;
+    __u16 destination = lir_header->destination;
     printk(KERN_EMERG "lir_header->protocol %d\n", lir_header->protocol);
     printk(KERN_EMERG "lir_header->header_length %d\n", header_length);
     printk(KERN_EMERG "lir_header->total_length %d\n", total_length);

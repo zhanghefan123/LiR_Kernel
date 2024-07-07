@@ -137,7 +137,7 @@ struct RoutingTableEntry* generate_single_route(struct net* current_net_namespac
     entry->effective_bytes = bloom_filter->effective_bytes;
     // printk(KERN_EMERG "bloom filter params bitset: %d, hash_seed: %d, hash funcs: %d", bloom_filter->bitset_mask, bloom_filter->hash_seed, bloom_filter->nr_hash_funcs);
     // 将结束插入的布隆过滤器二进制数组内容拷贝到路由表项的二进制向量之中
-    memcpy(entry->bitset, bloom_filter->bitset, sizeof(unsigned long) * bloom_filter->effective_bytes);
+    memcpy(entry->bitset, bloom_filter->bitset, bloom_filter->effective_bytes);
     // 结束的时候进行布隆过滤器的重置
     reset_bloom_filter(bloom_filter);
     return entry;
@@ -260,12 +260,15 @@ int delete_routing_table(struct hlist_head *head_pointer_list) {
 void print_routing_table_entry(struct RoutingTableEntry *entry) {
     char message[200];
     char number[10];
+    char bitset_str[50];
     int index;
     sprintf(message, "source: %d destination %d ", entry->source_id, entry->destination_id);
     for (index = 0; index < entry->length_of_path; index++) {
         sprintf(number, "(%d|%d)->", entry->link_identifiers[index], entry->node_ids[index]);
         strcat(message, number);
     }
+    sprintf(bitset_str, "bitset %ld %ld %ld %ld\n", entry->bitset[0], entry->bitset[1], entry->bitset[2], entry->bitset[3]);
+    LOG_WITH_PREFIX(bitset_str);
     LOG_WITH_PREFIX(message);
 }
 
@@ -373,7 +376,7 @@ struct LirReturnDataStructure get_destination_list_and_construct_bf(struct net *
     struct bloom_filter *net_bloom_filter = get_bloom_filter(current_net_namespace);
     struct hlist_head *lir_routing_table = get_lir_routing_table_from_net_namespace(current_net_namespace);
     int current_satellite_id = get_satellite_id(current_net_namespace);
-    int index;
+    int intermediate_satellite_id = -1;
     // 当前已经获取的目的地的数量
     int count = 0;
     // 当前获取的目的地的编号
@@ -412,15 +415,35 @@ struct LirReturnDataStructure get_destination_list_and_construct_bf(struct net *
             // 打印条目
             // print_routing_table_entry(lir_routing_entry);
         }
-        // 找到了相应的路由条目之后，将路由条目中存储的布隆过滤器和现有的布隆过滤器相或
-        for(index = 0; index < net_bloom_filter->effective_bytes; index++){
-            net_bloom_filter->bitset[index] |= lir_routing_entry->bitset[index];
+        // ----------------------------------------------分段封装的代码----------------------------------------------
+        // 情况1: encoding_count <= 0
+        int encoding_count = get_encoding_count(current_net_namespace);
+        if(encoding_count <= 0){
+            int index;
+            // 找到了相应的路由条目之后，将路由条目中存储的布隆过滤器和现有的布隆过滤器相或
+            u8* net_bloom_filter_bit_set = (u8*)(net_bloom_filter->bitset);
+            u8* routing_entry_bit_set = (u8*)(lir_routing_entry->bitset);
+            for(index = 0; index < net_bloom_filter->effective_bytes; index++){
+                net_bloom_filter_bit_set[index] |= routing_entry_bit_set[index];
+            }
         }
+        // 情况2: encoding_count > 0
+        else{
+            // 2 --> 3 --> 4 --> 5 --> 6
+            int index;
+            for(index = 0; (index < encoding_count) && (index < lir_routing_entry->length_of_path); index++){
+                push_element_into_bloom_filter(net_bloom_filter, &(lir_routing_entry->link_identifiers[index]), sizeof(int));
+            }
+            intermediate_satellite_id = lir_routing_entry->node_ids[index-1];
+            // printk(KERN_EMERG "intermediate node id = %d\n", intermediate_satellite_id);
+        }
+        // ----------------------------------------------分段封装的代码----------------------------------------------
         count++;
     }
     // 拷贝一份布隆过滤器并进行返回
     lir_return_data_structure.bloom_filter = net_bloom_filter;
     lir_return_data_structure.output_interface = output_interface;
+    lir_return_data_structure.intermediate_node_id = intermediate_satellite_id;
     return lir_return_data_structure;
 }
 

@@ -34,8 +34,8 @@ opt-objs := \
 	network_lir_rcv.o \
 	network_ip_rcv.o \
 	network_sk_data.o \
-	network_opt_path_table.o \
 	crypto_function.o \
+	session_path_table.o
 
 
 OUTPUT_DIR = "./build"
