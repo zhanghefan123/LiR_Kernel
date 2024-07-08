@@ -79,7 +79,7 @@ int routing_entry_equal_judgement(struct RoutingTableEntry *entry, int source_id
 /**
  * 根据单行信息进行单条路由的生成
  * @param current_net_namespace 当前的网络命名空寂那
- * @param corresponding_message 相应的单行信息
+ * @param corresponding_message 相应的单行信息, 我们可以将这个单行的信息当成路径的表示
  * @return
  */
 struct RoutingTableEntry* generate_single_route(struct net* current_net_namespace, char* corresponding_message){
@@ -94,10 +94,11 @@ struct RoutingTableEntry* generate_single_route(struct net* current_net_namespac
     int number;
     int link_identifier_index = 0;
     int node_index = 0;
+    entry->route_str_repr = (char*)(kmalloc(sizeof(char) * 100, GFP_KERNEL));  // 存储用来构建路由表项的字符串
+    sprintf(entry->route_str_repr, "%s", corresponding_message);  // 将单行字符串放到 route_str_repr 之中
     // 开始的时候首先进行布隆过滤器的重置,准备向布隆过滤器之中存放内容
     reset_bloom_filter(bloom_filter);
     while (true) {
-
         single_number = strsep(&corresponding_message, delimeter);
         if (single_number == NULL || (strcmp(single_number, "") == 0)) {
             break;
@@ -219,6 +220,9 @@ void free_routing_table_entry(struct RoutingTableEntry *routing_table_entry) {
         if(routing_table_entry->node_ids != NULL){
             kfree(routing_table_entry->node_ids);
         }
+        if(routing_table_entry->route_str_repr != NULL){
+            kfree(routing_table_entry->route_str_repr);
+        }
         kfree(routing_table_entry);
     }
 }
@@ -264,6 +268,7 @@ void print_routing_table_entry(struct RoutingTableEntry *entry) {
         sprintf(number, "(%d|%d)->", entry->link_identifiers[index], entry->node_ids[index]);
         strcat(message, number);
     }
+    printk(KERN_EMERG "route_str_repr: %s\n", entry->route_str_repr);
     LOG_WITH_PREFIX(message);
 }
 

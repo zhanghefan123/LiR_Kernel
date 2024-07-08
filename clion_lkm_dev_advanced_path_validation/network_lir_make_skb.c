@@ -511,8 +511,8 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
         u32* hmac_result = calculate_hmac(hmac_data_structure,
                                           hash_of_static_fields,
                                           HASH_OUTPUT_LENGTH_IN_BYTES,
-                                          key_from_source_to_intermediate); // 利用密钥计算hmac
-        if(index != lir_routing_entry->length_of_path - 1){
+                                          key_from_source_to_intermediate); // 利用密钥源节点和中间节点的对称密钥计算hmac
+        if(index != lir_routing_entry->length_of_path - 1){ // 如果不是最后一个元素
             int link_identifier = lir_routing_entry->link_identifiers[index+1];
             final_insert_element ^= (*hmac_result) ^ (u32)(link_identifier);
         } else {

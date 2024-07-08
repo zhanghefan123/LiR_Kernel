@@ -58,8 +58,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
                                   struct inet_cork *cork,
                                   struct LirReturnDataStructure *lir_return_data_structure,
                                   __u16 source_node_id,
-                                  __u16 destination_node_id,
-                                  int app_length);
+                                  __u16 destination_node_id);
 
 __u16 get_opt_header_total_length(struct LirReturnDataStructure *lir_return_data_structure,
                                 bool first_packet);

@@ -47,7 +47,7 @@ struct path_validation_field{
 };
 
 // OPV IN OPT
-struct origin_validation_field{
+struct origin_path_validation_field{
     __u32 opv1;
     __u32 opv2;
     __u32 opv3;

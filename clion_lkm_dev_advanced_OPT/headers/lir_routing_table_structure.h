@@ -24,6 +24,7 @@ struct RoutingTableEntry {
     unsigned long *bitset; // 插入 link_identifiers 所对应的 bitset
     struct net_device* output_interface; // 出接口所对应的接口表项
     u32 effective_bytes; // bitset 所对应的有效的字节数
+    char* route_str_repr; // 路由的字符串表示
 };
 
 struct RoutingTableEntry* init_routing_table_entry(int bitset_length);

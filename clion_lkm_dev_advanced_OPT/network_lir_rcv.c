@@ -705,37 +705,32 @@ int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *
     int destination = ntohs(lir_header->destination);  // 拿到包的 destination
     unsigned char *pvf_pointer = (unsigned char *) &lir_header[1];  // 拿到指向 pvf 的指针
     unsigned char *ovfs_pointer = pvf_pointer + sizeof(struct path_validation_field);  // 拿到指向 ovf 数组的指针
-    struct origin_validation_field *ovfs = (struct origin_validation_field *) ovfs_pointer;
+    struct origin_path_validation_field *opvs = (struct origin_path_validation_field *) ovfs_pointer;
     struct hlist_head *session_path_table = get_session_path_table_from_net_namespace(current_net_namespace); // 获取会话路径表
     struct SessionPathTableEntry *session_path_table_entry = find_entry_in_session_path_table(session_path_table,
                                                                                               source,
                                                                                               destination);  // 通过源和目的进行表项的获取
     if (session_path_table_entry) { // 如果找到了路由表项
-        // -------------------------------------------------- ovf 字段验证 --------------------------------------------------
+        // -------------------------------------------------- opv 字段验证 --------------------------------------------------
         int current_satellite_id = get_satellite_id(current_net_namespace); // 拿到当前卫星的 id
-        // -------------------------------------------------- 计算载荷哈希 ---------------------------------------------------
-        //        unsigned char *static_fields_hash = calculate_static_fields_hash_of_lir(lir_header,
-        //                                                                                current_net_namespace);  // 计算静态哈希
-        struct udphdr* udp_header = udp_hdr(skb);
-        unsigned char* payload_hash = calculate_payload_hash(udp_header, current_net_namespace);
-        // -------------------------------------------------- 计算载荷哈希 ---------------------------------------------------
+        struct udphdr* udp_header = udp_hdr(skb); // 拿到 udp 的首部
         struct shash_desc *hmac_data_structure = get_hmac_data_structure(current_net_namespace); // 计算 hmac_data
-        unsigned char *ovf_hmac_result;  // 计算 hmac_result
+        unsigned char *opv_hmac_result;  // 计算 hmac_result
         int current_index = session_path_table_entry->current_index;  // 需要验证的 ovf 的索引
         char key_from_source_to_current[20]; // 存储对称密钥的字符串
         sprintf(key_from_source_to_current, "key-%d-%d", source, current_satellite_id);  // 填充存储对称密钥的字符串
-        ovf_hmac_result = calculate_hmac(hmac_data_structure,payload_hash,HASH_OUTPUT_LENGTH_IN_BYTES,key_from_source_to_current); // 计算 hmac 结果
-        bool same = COMPARE_MEMORY((unsigned char *) (&ovfs[current_index]), ovf_hmac_result, OPT_VALIDATION_SIZE_IN_BYTES);  // 进行内存比较
-        kfree(ovf_hmac_result);
+        opv_hmac_result = calculate_hmac(hmac_data_structure,pvf_pointer,OPT_VALIDATION_SIZE_IN_BYTES,key_from_source_to_current); // 计算 hmac 结果
+        bool same = COMPARE_MEMORY((unsigned char *) (&opvs[current_index]), opv_hmac_result, OPT_VALIDATION_SIZE_IN_BYTES);  // 进行内存比较
+        kfree(opv_hmac_result);
         if (same) { // 如果结果一致说明验证通过, 这个时候 payload hash 还没有被释放，所以最后要注意进行释放
             LOG_WITH_PREFIX("VALIDATION PASSED");
         } else {  // 如果结果不一致，说明验证不通过，释放所有的 hash 以及 hmac 计算结果，以及skb
             LOG_WITH_PREFIX("VALIDATION NOT PASSED");
-            kfree(payload_hash);
             kfree_skb(skb);
             return NET_RX_DROP;
         }
-        // -------------------------------------------------- ovf 字段验证 --------------------------------------------------
+        unsigned char* payload_hash = calculate_payload_hash(udp_header, current_net_namespace); // 首部的后面就是数据部分，所以计算载荷的哈希
+        // -------------------------------------------------- opv 字段验证 --------------------------------------------------
         bool local_deliver = (session_path_table_entry->destination_id == current_satellite_id);
         if (local_deliver) { // 如果数据包是本地交付，需要进行 pvf 字段的还原。
             // 进行还原 A->B->C->D 则加密的顺序为 KD KB KC

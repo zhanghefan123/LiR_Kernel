@@ -138,7 +138,7 @@ struct sk_buff *lir_make_skb(struct sock *sk,
     }
 
     return lir_make_skb_core(sk, &queue, cork, lir_return_data_structure,
-                             source_node_id, destination_node_id, app_length);
+                             source_node_id, destination_node_id);
 }
 
 __u16 get_opt_header_total_length(struct LirReturnDataStructure *lir_return_data_structure, bool first_packet) {
@@ -156,7 +156,7 @@ __u16 get_opt_header_total_length(struct LirReturnDataStructure *lir_return_data
     } else {
         return (__u16) (sizeof(struct lirhdr)) +
                (__u16) (sizeof(struct path_validation_field)) +    // PVF 字段
-               (__u16) (sizeof(struct origin_validation_field)) * (length_of_path); // OPV 字段
+               (__u16) (sizeof(struct origin_path_validation_field)) * (length_of_path); // OPV 字段
     }
 }
 
@@ -462,8 +462,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
                                   struct inet_cork *cork,
                                   struct LirReturnDataStructure *lir_return_data_structure,
                                   __u16 source_node_id,
-                                  __u16 destination_node_id,
-                                  int app_length) {
+                                  __u16 destination_node_id) {
     // --------------      initialize        --------------
     bool first_packet = get_first_packet_status(sk);
     unsigned char* payload_hash = NULL;
@@ -510,6 +509,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
     lir_select_id(net, skb, sk, 1, source_node_id, destination_node_id);
     fill_lir_header_length(lir_header, lir_return_data_structure, first_packet);
     // ------------------------- 计算 payload hash -----------------------------
+    // 计算方式: 拿到 udp 首部之后的数据部分即可
     payload_hash = calculate_payload_hash(udp_header, net);
     // ------------------------- 计算 payload hash -----------------------------
     fill_opt_field(lir_header, lir_return_data_structure, net, first_packet, payload_hash);
@@ -561,47 +561,90 @@ void fill_opt_field(struct lirhdr *lir_header,
         // unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, current_net_namespace);
         struct shash_desc* hmac_data_structure = get_hmac_data_structure(current_net_namespace);
         int pvf_size = sizeof(struct path_validation_field);
-        int ovfs_size = sizeof(struct origin_validation_field) * length_of_path;
+        int ovfs_size = sizeof(struct origin_path_validation_field) * length_of_path;
         struct path_validation_field* pvf = (struct path_validation_field*)kmalloc(pvf_size, GFP_KERNEL);
-        struct origin_validation_field* ovfs = (struct origin_validation_field*)kmalloc(ovfs_size, GFP_KERNEL);
+        struct origin_path_validation_field* opvs = (struct origin_path_validation_field*)kmalloc(ovfs_size, GFP_KERNEL);
         int current_satellite_id = get_satellite_id(current_net_namespace);
+        // assume there are four nodes and length of path = 3
+        // A---->B---->C---->D node ids = [B,C,D].
         // --------------------------------initialize pvf--------------------------------
         char key_from_source_to_end[20];
         int final_node = routing_table_entry->node_ids[routing_table_entry->length_of_path-1]; // 获取路径最后一个节点id
         sprintf(key_from_source_to_end, "key-%d-%d", current_satellite_id, final_node);
-        unsigned char* hmac_result = calculate_hmac(hmac_data_structure,
+        unsigned char* pvf0_hmac_result = calculate_hmac(hmac_data_structure,
                                                     payload_hash,
                                                     HASH_OUTPUT_LENGTH_IN_BYTES,
                                                     key_from_source_to_end);
-        memcpy(pvf, hmac_result, OPT_VALIDATION_SIZE_IN_BYTES); // 将计算出来的 hmac 结果拷贝
+        memcpy(pvf, pvf0_hmac_result, OPT_VALIDATION_SIZE_IN_BYTES); // 将计算出来的 hmac 结果拷贝, pvf0 = MACKD(DATAHASH)
         print_hash_or_hmac_result((unsigned char *) pvf, OPT_VALIDATION_SIZE_IN_BYTES);
-        kfree(hmac_result);  // 释放 hmac 结果
         // --------------------------------initialize pvf--------------------------------
-        // --------------------------------initialize ovfs-------------------------------
+        // --------------------------------initialize opvs-------------------------------
         int index;
+        // there are three opvs for B,C,D
         for(index = 0; index < length_of_path; index++){
             char key_from_source_to_intermediate[20];
             sprintf(key_from_source_to_intermediate, "key-%d-%d", current_satellite_id, routing_table_entry->node_ids[index]);
-            unsigned char* hmac_result_new = calculate_hmac(hmac_data_structure,
-                                                            payload_hash,
-                                                            HASH_OUTPUT_LENGTH_IN_BYTES,
-                                                            key_from_source_to_intermediate);
-            memcpy(&ovfs[index], hmac_result_new, OPT_VALIDATION_SIZE_IN_BYTES);
-            kfree(hmac_result_new);
+            unsigned char* pvfi_hmac_result;
+            if (index == 0){  // 如果是第一个，则要用到 PVF0
+                // PVF1 = MACKB(MACKD(DATAHASH))
+                pvfi_hmac_result = calculate_hmac(hmac_data_structure,
+                                                                 pvf0_hmac_result,
+                                                                 OPT_VALIDATION_SIZE_IN_BYTES,
+                                                                 key_from_source_to_intermediate);
+                // COPY the PVF1 to the OPV[0] || and when intermediate satellite receive it, it simply applies the MACK1(PVF0) then can verify the result
+                memcpy(&opvs[index], pvfi_hmac_result, OPT_VALIDATION_SIZE_IN_BYTES); // HMAC_OUTPUT_LENGTH_IN_BYTES = 32 bytes || OPT_VALIDATION_SIZE_IN_BYTES=16 bytes
+                // PVF0 is utilized, then we can free the memory.
+                kfree(pvf0_hmac_result);
+            } else if (index == (length_of_path - 1)){ // 如果是最后一个记得要释放 pvf_new_hmac_result
+                // PVF3 = MACKC(PVF1)
+                unsigned char* pvf_new_hmac_result = calculate_hmac(hmac_data_structure,
+                                                                    pvfi_hmac_result,
+                                                                    OPT_VALIDATION_SIZE_IN_BYTES,
+                                                                    key_from_source_to_intermediate);
+                // OPV[2] = MACKD(PVF2)
+                memcpy(&opvs[index], pvf_new_hmac_result, OPT_VALIDATION_SIZE_IN_BYTES);
+                // PVF2 is utilized , then we can free the memory
+                kfree(pvfi_hmac_result);
+                kfree(pvf_new_hmac_result);
+            } else { // 如果不是第一个也不是最后一个
+                // PVF2 = MACKC(PVF1)
+                unsigned char* pvf_new_hmac_result = calculate_hmac(hmac_data_structure,
+                                                                    pvfi_hmac_result,
+                                                                    OPT_VALIDATION_SIZE_IN_BYTES,
+                                                                    key_from_source_to_intermediate);
+                // OPV[1] = PVF2
+                memcpy(&opvs[index], pvf_new_hmac_result, OPT_VALIDATION_SIZE_IN_BYTES);
+                // PVF1 is utilized , then we can free the memory
+                kfree(pvfi_hmac_result);
+                pvfi_hmac_result = pvf_new_hmac_result;
+            }
         }
-        kfree(payload_hash);  // 用完了数据包载荷部分的哈希就将其进行释放
+        // --------------------------------initialize opvs-------------------------------
+        // --------------------------------initialize ovfs-------------------------------
+        //        int index;
+        //        for(index = 0; index < length_of_path; index++){
+        //            char key_from_source_to_intermediate[20];
+        //            sprintf(key_from_source_to_intermediate, "key-%d-%d", current_satellite_id, routing_table_entry->node_ids[index]);
+        //            unsigned char* hmac_result_new = calculate_hmac(hmac_data_structure,
+        //                                                            payload_hash,
+        //                                                            HASH_OUTPUT_LENGTH_IN_BYTES,
+        //                                                            key_from_source_to_intermediate);
+        //            memcpy(&ovfs[index], hmac_result_new, OPT_VALIDATION_SIZE_IN_BYTES);
+        //            kfree(hmac_result_new);
+        //        }
+        //        kfree(payload_hash);  // 用完了数据包载荷部分的哈希就将其进行释放
         // --------------------------------initialize ovfs-------------------------------
         // ----------------------------place into lirheader------------------------------
         unsigned char* copy_source = (unsigned char*)(pvf);
         unsigned char* copy_destination = ((unsigned char*)lir_header) + sizeof(struct lirhdr);
         memcpy(copy_destination, copy_source, pvf_size);
 
-        copy_source = (unsigned char*)(ovfs);
+        copy_source = (unsigned char*)(opvs);
         copy_destination = ((unsigned char*)lir_header) + sizeof(struct lirhdr) + pvf_size;
         memcpy(copy_destination, copy_source, ovfs_size);
         // ----------------------------place into lirheader------------------------------
         kfree(pvf);
-        kfree(ovfs);
+        kfree(opvs);
     }
 }
 
