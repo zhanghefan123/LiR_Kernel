@@ -10,7 +10,6 @@ modules.order
 Module.symvers
 cmake-build-debug
 .idea
-cmake
 .Module.symvers.cmd
 backup.zip
 backup

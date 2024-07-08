@@ -89,6 +89,20 @@ int lir_setup_cork(struct sock *sk,
 }
 
 // 成功检查
+/**
+ *
+ * @param sk
+ * @param lir_return_data_structure
+ * @param app_and_transport_length
+ * @param flags
+ * @param getfrag
+ * @param from 就是上层传下来的 app 的长度
+ * @param cork
+ * @param ipc
+ * @param source_node_id
+ * @param destination_node_id
+ * @return
+ */
 struct sk_buff *lir_make_skb(struct sock *sk,
                              struct LirReturnDataStructure *lir_return_data_structure,
                              int app_and_transport_length,
@@ -113,6 +127,9 @@ struct sk_buff *lir_make_skb(struct sock *sk,
         return ERR_PTR(err);
     }
     // --------------      initialize        --------------
+    // -------------   calculate payload hash ---------------
+    // calculate_payload_hash(from);
+    // -------------   calculate payload hash ---------------
     err = lir_append_data(sk, &queue, lir_return_data_structure,
                           app_and_transport_length, flags,
                           getfrag, from, &current->task_frag,

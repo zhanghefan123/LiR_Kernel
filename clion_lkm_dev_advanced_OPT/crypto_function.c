@@ -42,6 +42,12 @@ struct shash_desc* generate_hmac_data_structure(void){
     return shash;
 }
 
+/**
+ * 进行 lir 的 payload 部分的 hash 的运算
+ * @param lir_header lir 的头部
+ * @param net 网络命名空间
+ * @return
+ */
 unsigned char* calculate_static_fields_hash_of_lir(struct lirhdr* lir_header, struct net* net){
     struct shash_desc* hash_data_structure = get_hash_data_structure(net);  // get hash data structure
     char* last_char = (char*)&(lir_header[1]) - sizeof(__u16);
@@ -52,6 +58,17 @@ unsigned char* calculate_static_fields_hash_of_lir(struct lirhdr* lir_header, st
     *last_char = old_char;
     lir_header->check = old_check_sum;
     return static_fields_hash;
+}
+
+/**
+ * 计算 payload 部分的哈希值
+ * @param app_msg 应用曾向下传递的消息
+ * @return
+ */
+unsigned char* calculate_payload_hash(void* app_msg){
+    char* app_msg_in_str = (char*)(app_msg);
+    printk(KERN_EMERG "app message in str: %s\n", app_msg_in_str);
+    return NULL;
 }
 
 void free_crypto_data_structure(struct shash_desc* hmac_data_structure){

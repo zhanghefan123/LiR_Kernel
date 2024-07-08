@@ -26,8 +26,8 @@ int lir_udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len){
     struct udp_sock *udp_sock = udp_sk(sk);  // get udp sock
     DECLARE_SOCKADDR(struct sockaddr_in*, usin, msg->msg_name); // set address
     struct LirReturnDataStructure lir_return_data_structure; // result
-    int udp_and_app_len = (int) (len) + (int) sizeof(struct udphdr); // len is the app len
-    int udp_len = sizeof(struct udphdr);
+    int udp_and_app_len = (int) (len) + (int) sizeof(struct udphdr); // len is the app len 就是应用曾下发下来的长度
+    int udp_len = sizeof(struct udphdr);  // udp_len 就是 udp 头部的长度
     struct net *current_net_namespace = sock_net(sk);
     struct sk_buff *skb_to_sent;
     struct ipcm_cookie ipc;
@@ -43,16 +43,8 @@ int lir_udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len){
 
     // --------------    init sk->user_data  --------------
     init_or_update_network_sk_data(sk); // 更新是否是第一个数据包
-    bool first_packet = get_first_packet_status(sk);
-    if(first_packet){
-        LOG_WITH_PREFIX("FIRST PACKET");
-    } else {
-        LOG_WITH_PREFIX("NOT FIRST PACKET");
-    }
+    bool first_packet = get_first_packet_status(sk);  // 获取是否是第一个数据包
     // --------------    init sk->user_data  --------------
-
-
-    // --------------      initialize        --------------
 
     // --------------  get daddr dport sport --------------
     dport = usin->sin_port;
