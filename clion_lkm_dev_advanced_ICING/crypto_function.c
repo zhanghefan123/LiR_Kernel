@@ -9,7 +9,8 @@
 struct shash_desc* generate_hash_data_structure(void){
     struct crypto_shash* tfm;
     struct shash_desc *shash;
-    tfm = crypto_alloc_shash("sha1", 0, 0);
+    char* hash_algorithm = "sha3-256";
+    tfm = crypto_alloc_shash(hash_algorithm, 0, 0);
     if(IS_ERR(tfm)){
         printk(KERN_EMERG "create failed\n");
         return NULL;
@@ -27,7 +28,8 @@ struct shash_desc* generate_hash_data_structure(void){
 struct shash_desc* generate_hmac_data_structure(void){
     struct crypto_shash* tfm;
     struct shash_desc *shash;
-    tfm = crypto_alloc_shash("hmac(sha1)", 0, 0);
+    char* hmac_algorithm = "hmac(sha3-256)";
+    tfm = crypto_alloc_shash(hmac_algorithm, 0, 0);
     if(IS_ERR(tfm)){
         printk(KERN_EMERG "create failed\n");
         return NULL;

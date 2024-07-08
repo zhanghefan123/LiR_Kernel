@@ -8,9 +8,10 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include "network_lir_header.h"
-// SHA1 only have 160 bits
-#define HASH_OUTPUT_LENGTH_IN_BYTES 20
-#define HMAC_OUTPUT_LENGTH_IN_BYTES 20
+// SHA1 only have 160 bits and 20 bytes
+// SHA3-256 have 256 bits and 32 bytes
+#define HASH_OUTPUT_LENGTH_IN_BYTES 32
+#define HMAC_OUTPUT_LENGTH_IN_BYTES 32
 #define ICING_VALIDATION_SIZE_IN_BYTES 12
 struct shash_desc* generate_hash_data_structure(void);
 struct shash_desc* generate_hmac_data_structure(void);

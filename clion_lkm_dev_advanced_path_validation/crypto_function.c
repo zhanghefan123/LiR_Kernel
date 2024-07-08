@@ -7,7 +7,8 @@
 struct shash_desc* generate_hash_data_structure(void){
     struct crypto_shash* tfm;
     struct shash_desc *shash;
-    tfm = crypto_alloc_shash("sha1", 0, 0);
+    char* hash_algorithm = "sha3-256";
+    tfm = crypto_alloc_shash(hash_algorithm, 0, 0);
     if(IS_ERR(tfm)){
         printk(KERN_EMERG "create failed\n");
         return NULL;
@@ -25,7 +26,8 @@ struct shash_desc* generate_hash_data_structure(void){
 struct shash_desc* generate_hmac_data_structure(void){
     struct crypto_shash* tfm;
     struct shash_desc *shash;
-    tfm = crypto_alloc_shash("hmac(sha1)", 0, 0);
+    char* hmac_algorithm = "hmac(sha3-256)";
+    tfm = crypto_alloc_shash(hmac_algorithm, 0, 0);
     if(IS_ERR(tfm)){
         printk(KERN_EMERG "create failed\n");
         return NULL;
@@ -53,7 +55,7 @@ void free_crypto_data_structure(struct shash_desc* hmac_data_structure){
 
 // return the heap memory / remember to release
 u32* calculate_hmac(struct shash_desc* hmac_data_structure, unsigned char* data, int length_of_data, char* key){
-    unsigned char hmac_output[20];
+    unsigned char hmac_output[HMAC_OUTPUT_LENGTH_IN_BYTES];
     u32* real_output = (u32*)(kmalloc(sizeof(u32), GFP_KERNEL));
     // set key in hmac
     if (crypto_shash_setkey(hmac_data_structure->tfm, key, strlen(key))) {
@@ -69,7 +71,7 @@ u32* calculate_hmac(struct shash_desc* hmac_data_structure, unsigned char* data,
         kfree(hmac_data_structure);
         return NULL;
     }
-    // copy hmac_output to real_output
+    // copy hmac_output to real_output, here only used 32 out of 256
     memcpy(real_output, hmac_output, sizeof(u32));
     return real_output;
 }
@@ -104,7 +106,7 @@ void test_hash_and_hmac(struct net* current_net_namespace){
     char key_from_source_to_intermediate[20];
     sprintf(key_from_source_to_intermediate, "key-%d-%d", 1, 2);
     u32* hmac_result = calculate_hmac(lir_data_structure->hmac_data_structure,
-                                                hash_result,  LENGTH_OF_HASH, key_from_source_to_intermediate);
+                                      hash_result, HASH_OUTPUT_LENGTH_IN_BYTES, key_from_source_to_intermediate);
     print_hash_or_hmac_result((unsigned char*)hmac_result, 4);
     *hmac_result = (*hmac_result) ^ (u32)(1);
     print_hash_or_hmac_result((unsigned char*)hmac_result, 4);

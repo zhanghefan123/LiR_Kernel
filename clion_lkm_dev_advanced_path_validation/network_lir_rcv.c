@@ -336,7 +336,7 @@ unsigned char* get_static_hash(struct lirhdr* lir_header, struct net* net){
     __u16 old_check_sum = lir_header->check;
     lir_header->check = 0;
     unsigned char* static_fields_hash = calculate_static_fields_hash(lir_header, net);
-    // print_hash_or_hmac_result(static_fields_hash, LENGTH_OF_HASH);
+    // print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
     lir_header->check = old_check_sum;
     return static_fields_hash;
 }
@@ -370,7 +370,7 @@ struct sk_buff* lir_rcv_core(struct sk_buff* skb, struct net* net){
     //    }
     // -----------------   calculate hash --------------
     //    unsigned char* static_fields_hash = get_static_hash(lir_header, net);
-    //    print_hash_or_hmac_result(static_fields_hash, LENGTH_OF_HASH);
+    //    print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
     //    kfree(static_fields_hash);
     // -----------------   calculate hash --------------
 
@@ -488,7 +488,7 @@ int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struc
     sprintf(key_from_source_to_intermediate, "key-%d-%d", source_satellite_id, current_satellite_id);
     u32* hmac_result = calculate_hmac(hmac_data_structure,
                                       static_fields_hash,
-                                      LENGTH_OF_HASH,
+                                      HASH_OUTPUT_LENGTH_IN_BYTES,
                                       key_from_source_to_intermediate);
     kfree(static_fields_hash);
     // --------------------------------------------- get the static hash of the lir_header ------------------------------------

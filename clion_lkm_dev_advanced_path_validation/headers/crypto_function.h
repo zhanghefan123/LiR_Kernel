@@ -7,7 +7,8 @@
 #include <crypto/hash.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
-#define LENGTH_OF_HASH 20
+#define HASH_OUTPUT_LENGTH_IN_BYTES 32
+#define HMAC_OUTPUT_LENGTH_IN_BYTES 32
 struct shash_desc* generate_hash_data_structure(void);
 struct shash_desc* generate_hmac_data_structure(void);
 void free_crypto_data_structure(struct shash_desc* hmac_data_structure);

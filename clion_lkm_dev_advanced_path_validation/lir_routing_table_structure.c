@@ -480,7 +480,7 @@ struct LirReturnDataStructure get_destination_and_find_routing_table_entry(struc
 //            sprintf(key_from_source_to_intermediate, "key%d-%d", current_satellite_id, intermediate_node);
 //            u32* hmac_result = calculate_hmac(hmac_data_structure,
 //                                              static_field_hash,
-//                                              LENGTH_OF_HASH,
+//                                              HASH_OUTPUT_LENGTH_IN_BYTES,
 //                                              key_from_source_to_intermediate);
 //            if(index != lir_routing_entry->length_of_path - 1){
 //                int link_identifier = lir_routing_entry->link_identifiers[index+1];
