@@ -105,6 +105,7 @@ int lir_setup_cork(struct sock *sk,
  */
 struct sk_buff *lir_make_skb(struct sock *sk,
                              struct LirReturnDataStructure *lir_return_data_structure,
+                             int app_length,
                              int app_and_transport_length,
                              unsigned int flags,
                              int getfrag(void *from, char *to, int offset,
@@ -127,9 +128,6 @@ struct sk_buff *lir_make_skb(struct sock *sk,
         return ERR_PTR(err);
     }
     // --------------      initialize        --------------
-    // -------------   calculate payload hash ---------------
-    // calculate_payload_hash(from);
-    // -------------   calculate payload hash ---------------
     err = lir_append_data(sk, &queue, lir_return_data_structure,
                           app_and_transport_length, flags,
                           getfrag, from, &current->task_frag,
@@ -140,7 +138,7 @@ struct sk_buff *lir_make_skb(struct sock *sk,
     }
 
     return lir_make_skb_core(sk, &queue, cork, lir_return_data_structure,
-                             source_node_id, destination_node_id);
+                             source_node_id, destination_node_id, app_length);
 }
 
 __u16 get_opt_header_total_length(struct LirReturnDataStructure *lir_return_data_structure, bool first_packet) {
@@ -464,9 +462,11 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
                                   struct inet_cork *cork,
                                   struct LirReturnDataStructure *lir_return_data_structure,
                                   __u16 source_node_id,
-                                  __u16 destination_node_id) {
+                                  __u16 destination_node_id,
+                                  int app_length) {
     // --------------      initialize        --------------
     bool first_packet = get_first_packet_status(sk);
+    unsigned char* payload_hash = NULL;
     struct sk_buff *skb, *tmp_skb;
     struct sk_buff **tail_skb;
     struct inet_sock *inet = inet_sk(sk);
@@ -478,6 +478,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
         goto out;
     }
     tail_skb = &(skb_shinfo(skb)->frag_list);
+    struct udphdr* udp_header = udp_hdr(skb); // get udp header
     // --------------      initialize        --------------
 
     /* move skb->data to ip header from ext header */
@@ -508,7 +509,10 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
     lir_header->current_path_index = htons(1);
     lir_select_id(net, skb, sk, 1, source_node_id, destination_node_id);
     fill_lir_header_length(lir_header, lir_return_data_structure, first_packet);
-    fill_opt_field(lir_header, lir_return_data_structure, net, first_packet);
+    // ------------------------- 计算 payload hash -----------------------------
+    payload_hash = calculate_payload_hash(udp_header, net);
+    // ------------------------- 计算 payload hash -----------------------------
+    fill_opt_field(lir_header, lir_return_data_structure, net, first_packet, payload_hash);
     skb->priority = (cork->tos != -1) ? cork->priority : sk->sk_priority;
     skb->mark = cork->mark;
     skb->tstamp = (cork->transmit_time);
@@ -518,13 +522,17 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
 
 /**
  * 进行 opt 字段的填充
- * @param lir_header
- * @param lir_return_data_structure
+ * @param lir_header lir 网络层首部
+ * @param lir_return_data_structure 路由的查找结果
+ * @param current_net_namespace 当前的网络命名空间
+ * @param first_packet 是否是第一个数据包
+ * @param payload_hash 数据包载荷部分的哈希
  */
 void fill_opt_field(struct lirhdr *lir_header,
                     struct LirReturnDataStructure *lir_return_data_structure,
                     struct net *current_net_namespace,
-                    bool first_packet) {
+                    bool first_packet,
+                    unsigned char* payload_hash) {
     if (first_packet) { // 处理第一个数据包
         struct RoutingTableEntry *routing_table_entry = lir_return_data_structure->routing_table_entry;  // 获取路由表项
         struct shash_desc* hash_data_structure = get_hash_data_structure(current_net_namespace);  // 计算 hash
@@ -550,7 +558,7 @@ void fill_opt_field(struct lirhdr *lir_header,
     } else { // 处理其他的数据包
         struct RoutingTableEntry* routing_table_entry = lir_return_data_structure->routing_table_entry;
         int length_of_path = routing_table_entry->length_of_path;
-        unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, current_net_namespace);
+        // unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, current_net_namespace);
         struct shash_desc* hmac_data_structure = get_hmac_data_structure(current_net_namespace);
         int pvf_size = sizeof(struct path_validation_field);
         int ovfs_size = sizeof(struct origin_validation_field) * length_of_path;
@@ -562,7 +570,7 @@ void fill_opt_field(struct lirhdr *lir_header,
         int final_node = routing_table_entry->node_ids[routing_table_entry->length_of_path-1]; // 获取路径最后一个节点id
         sprintf(key_from_source_to_end, "key-%d-%d", current_satellite_id, final_node);
         unsigned char* hmac_result = calculate_hmac(hmac_data_structure,
-                                                    static_fields_hash,
+                                                    payload_hash,
                                                     HASH_OUTPUT_LENGTH_IN_BYTES,
                                                     key_from_source_to_end);
         memcpy(pvf, hmac_result, OPT_VALIDATION_SIZE_IN_BYTES); // 将计算出来的 hmac 结果拷贝
@@ -575,13 +583,13 @@ void fill_opt_field(struct lirhdr *lir_header,
             char key_from_source_to_intermediate[20];
             sprintf(key_from_source_to_intermediate, "key-%d-%d", current_satellite_id, routing_table_entry->node_ids[index]);
             unsigned char* hmac_result_new = calculate_hmac(hmac_data_structure,
-                                                            static_fields_hash,
+                                                            payload_hash,
                                                             HASH_OUTPUT_LENGTH_IN_BYTES,
                                                             key_from_source_to_intermediate);
             memcpy(&ovfs[index], hmac_result_new, OPT_VALIDATION_SIZE_IN_BYTES);
             kfree(hmac_result_new);
         }
-        kfree(static_fields_hash);
+        kfree(payload_hash);  // 用完了数据包载荷部分的哈希就将其进行释放
         // --------------------------------initialize ovfs-------------------------------
         // ----------------------------place into lirheader------------------------------
         unsigned char* copy_source = (unsigned char*)(pvf);

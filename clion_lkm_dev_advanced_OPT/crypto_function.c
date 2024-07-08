@@ -62,13 +62,16 @@ unsigned char* calculate_static_fields_hash_of_lir(struct lirhdr* lir_header, st
 
 /**
  * 计算 payload 部分的哈希值
- * @param app_msg 应用曾向下传递的消息
+ * @param udp_header 传输曾指针
+ * @param app_length app 数据的长度
  * @return
  */
-unsigned char* calculate_payload_hash(void* app_msg){
-    char* app_msg_in_str = (char*)(app_msg);
-    printk(KERN_EMERG "app message in str: %s\n", app_msg_in_str);
-    return NULL;
+unsigned char* calculate_payload_hash(struct udphdr* udp_header, struct net* net){
+    char* app_start = (char*)(udp_header) + sizeof(struct udphdr); // 获取 app 起始的位置
+    struct shash_desc* hash_data_structure = get_hash_data_structure(net);  // 获取哈希数据结构
+    unsigned char* static_fields_hash = calculate_hash(hash_data_structure, app_start);  // 获取payload哈希
+    print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES); // 输出哈希结果
+    return static_fields_hash;
 }
 
 void free_crypto_data_structure(struct shash_desc* hmac_data_structure){

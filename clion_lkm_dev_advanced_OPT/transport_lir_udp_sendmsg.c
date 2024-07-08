@@ -63,6 +63,7 @@ int lir_udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len){
 
     // --------------     create skb (IP)    --------------
     skb_to_sent = lir_make_skb(sk, &lir_return_data_structure,
+                               len,
                                udp_and_app_len,
                                msg->msg_flags, getfrag, msg,
                                &cork, &ipc,

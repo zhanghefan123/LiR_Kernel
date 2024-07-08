@@ -13,12 +13,14 @@ int get_icing_validation_size(struct LirReturnDataStructure *lir_return_data_str
 void fill_opt_field(struct lirhdr *lir_header,
                     struct LirReturnDataStructure *lir_return_data_structure,
                     struct net *current_net_namespace,
-                    bool first_packet);
+                    bool first_packet,
+                    unsigned char* payload_hash);
 
 void resolve_lir_make_skb_inner_functions_address(void);
 
 struct sk_buff *lir_make_skb(struct sock *sk,
                              struct LirReturnDataStructure *lir_return_data_structure,
+                             int app_length,
                              int app_and_transport_length,
                              unsigned int flags,
                              int getfrag(void *from, char *to, int offset,
@@ -56,7 +58,8 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
                                   struct inet_cork *cork,
                                   struct LirReturnDataStructure *lir_return_data_structure,
                                   __u16 source_node_id,
-                                  __u16 destination_node_id);
+                                  __u16 destination_node_id,
+                                  int app_length);
 
 __u16 get_opt_header_total_length(struct LirReturnDataStructure *lir_return_data_structure,
                                 bool first_packet);

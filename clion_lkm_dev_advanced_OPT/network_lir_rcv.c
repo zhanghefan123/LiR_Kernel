@@ -705,7 +705,6 @@ int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *
     int destination = ntohs(lir_header->destination);  // 拿到包的 destination
     unsigned char *pvf_pointer = (unsigned char *) &lir_header[1];  // 拿到指向 pvf 的指针
     unsigned char *ovfs_pointer = pvf_pointer + sizeof(struct path_validation_field);  // 拿到指向 ovf 数组的指针
-    struct path_validation_field *pvf = (struct path_validation_field *) pvf_pointer;
     struct origin_validation_field *ovfs = (struct origin_validation_field *) ovfs_pointer;
     struct hlist_head *session_path_table = get_session_path_table_from_net_namespace(current_net_namespace); // 获取会话路径表
     struct SessionPathTableEntry *session_path_table_entry = find_entry_in_session_path_table(session_path_table,
@@ -714,87 +713,85 @@ int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *
     if (session_path_table_entry) { // 如果找到了路由表项
         // -------------------------------------------------- ovf 字段验证 --------------------------------------------------
         int current_satellite_id = get_satellite_id(current_net_namespace); // 拿到当前卫星的 id
-        unsigned char *static_fields_hash = calculate_static_fields_hash_of_lir(lir_header,
-                                                                                current_net_namespace);  // 计算静态哈希
+        // -------------------------------------------------- 计算载荷哈希 ---------------------------------------------------
+        //        unsigned char *static_fields_hash = calculate_static_fields_hash_of_lir(lir_header,
+        //                                                                                current_net_namespace);  // 计算静态哈希
+        struct udphdr* udp_header = udp_hdr(skb);
+        unsigned char* payload_hash = calculate_payload_hash(udp_header, current_net_namespace);
+        // -------------------------------------------------- 计算载荷哈希 ---------------------------------------------------
         struct shash_desc *hmac_data_structure = get_hmac_data_structure(current_net_namespace); // 计算 hmac_data
-        unsigned char *hmac_result;  // 计算 hmac_result
+        unsigned char *ovf_hmac_result;  // 计算 hmac_result
         int current_index = session_path_table_entry->current_index;  // 需要验证的 ovf 的索引
-        char key_from_source_to_current[20];
-        sprintf(key_from_source_to_current, "key-%d-%d", source, current_satellite_id);
-        hmac_result = calculate_hmac(hmac_data_structure,
-                                     static_fields_hash,
-                                     HASH_OUTPUT_LENGTH_IN_BYTES,
-                                     key_from_source_to_current);
-        bool same = COMPARE_MEMORY((unsigned char *) (&ovfs[current_index]), hmac_result, OPT_VALIDATION_SIZE_IN_BYTES);
-        if (same) {
-            kfree(hmac_result); // 释放 hmac
+        char key_from_source_to_current[20]; // 存储对称密钥的字符串
+        sprintf(key_from_source_to_current, "key-%d-%d", source, current_satellite_id);  // 填充存储对称密钥的字符串
+        ovf_hmac_result = calculate_hmac(hmac_data_structure,payload_hash,HASH_OUTPUT_LENGTH_IN_BYTES,key_from_source_to_current); // 计算 hmac 结果
+        bool same = COMPARE_MEMORY((unsigned char *) (&ovfs[current_index]), ovf_hmac_result, OPT_VALIDATION_SIZE_IN_BYTES);  // 进行内存比较
+        kfree(ovf_hmac_result);
+        if (same) { // 如果结果一致说明验证通过, 这个时候 payload hash 还没有被释放，所以最后要注意进行释放
             LOG_WITH_PREFIX("VALIDATION PASSED");
-        } else {
+        } else {  // 如果结果不一致，说明验证不通过，释放所有的 hash 以及 hmac 计算结果，以及skb
             LOG_WITH_PREFIX("VALIDATION NOT PASSED");
-            kfree(hmac_result);
-            kfree(static_fields_hash);
+            kfree(payload_hash);
             kfree_skb(skb);
             return NET_RX_DROP;
         }
         // -------------------------------------------------- ovf 字段验证 --------------------------------------------------
         bool local_deliver = (session_path_table_entry->destination_id == current_satellite_id);
-        if (local_deliver) {
+        if (local_deliver) { // 如果数据包是本地交付，需要进行 pvf 字段的还原。
             // 进行还原 A->B->C->D 则加密的顺序为 KD KB KC
             // 打印加密的顺序
             unsigned char temp_result[OPT_VALIDATION_SIZE_IN_BYTES];
-            unsigned char *hmac_result_new;
+            unsigned char *hmac_result_pvf;
             for (index = 0; index < session_path_table_entry->encrypt_length; index++) {
                 char key[20];
                 sprintf(key, "key-%d-%d", session_path_table_entry->source_id,
                         session_path_table_entry->encrypt_order[index]);
                 if (index == 0) {
-                    hmac_result_new = calculate_hmac(hmac_data_structure,
-                                                     static_fields_hash,
+                    hmac_result_pvf = calculate_hmac(hmac_data_structure,
+                                                     payload_hash,
                                                      HASH_OUTPUT_LENGTH_IN_BYTES,
                                                      key);
-                    memcpy(temp_result, hmac_result_new, OPT_VALIDATION_SIZE_IN_BYTES);
-                    kfree(hmac_result);
+                    memcpy(temp_result, hmac_result_pvf, OPT_VALIDATION_SIZE_IN_BYTES);
+                    kfree(hmac_result_pvf);
                 } else {
-                    hmac_result_new = calculate_hmac(hmac_data_structure,
+                    hmac_result_pvf = calculate_hmac(hmac_data_structure,
                                                      temp_result,
                                                      OPT_VALIDATION_SIZE_IN_BYTES,
                                                      key);
-                    memcpy(temp_result, hmac_result_new, OPT_VALIDATION_SIZE_IN_BYTES);
-                    kfree(hmac_result_new);
+                    memcpy(temp_result, hmac_result_pvf, OPT_VALIDATION_SIZE_IN_BYTES);
+                    kfree(hmac_result_pvf);
                 }
             }
             print_hash_or_hmac_result(temp_result, OPT_VALIDATION_SIZE_IN_BYTES);
             print_hash_or_hmac_result(pvf_pointer, OPT_VALIDATION_SIZE_IN_BYTES);
-            kfree(static_fields_hash);
+            kfree(payload_hash);  // 释放 payload hash
             return NET_RX_SUCCESS;
-        } else {
+        } else { // 如果数据包并非本地交付，需要进行转发
             // -------------------------------------------------- pvf 字段更新 --------------------------------------------------
             unsigned char *pvf_hmac_result = calculate_hmac(hmac_data_structure,
                                                             pvf_pointer,
                                                             sizeof(struct path_validation_field),
                                                             key_from_source_to_current);
             memcpy(pvf_pointer, pvf_hmac_result, sizeof(struct path_validation_field));
-            kfree(pvf_hmac_result);
+            kfree(pvf_hmac_result); // 释放 hmac_result
             // -------------------------------------------------- pvf 字段更新 --------------------------------------------------
             lir_packet_forward(skb, session_path_table_entry->output_device, current_net_namespace);
-            printk(KERN_EMERG "The packet should be forwarded from %s\n",
-                   session_path_table_entry->output_device->name);
-            kfree(static_fields_hash);
+            printk(KERN_EMERG "The packet should be forwarded from %s\n", session_path_table_entry->output_device->name);
+            kfree(payload_hash);  // 释放 payload hash
             return NET_RX_DROP;
         }
-    } else {  // 如果没有找到路由表项
+    } else {  // 如果没有找到路由表项, 则
         LOG_WITH_PREFIX("cannot find session table entry");
         kfree_skb(skb);
         return NET_RX_DROP;
     }
 }
 
-int
-lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
+int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
     bool first_packet = TEST_IF_FIRST_OPT_PACKET(skb);
-    if (first_packet) {
+    if (first_packet) { // 第一个数据包是用来进行路径的构建的
         return handle_first_opt_packet(current_net_namespace, skb, dev);
-    } else {
+    } else { // 其余的数据包才是用来真正的进行通信的
         return handle_other_opt_packets(current_net_namespace, skb, dev);
     }
 }
