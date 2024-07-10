@@ -27,14 +27,16 @@ bool validate_packet(struct lirhdr *lir_header,
                      int current_path_index,
                      struct net *current_net_namespace,
                      int source_node_id,
-                     int current_satellite_id);
+                     int current_satellite_id,
+                     unsigned char* static_fields_hash);
 void update_validation_fields(struct lirhdr* lir_header,
                               struct single_hop_icing* icing_path,
                               struct single_node_validation_icing* validation_list,
                               int current_path_index,
                               int current_satellite_id,
                               struct net* current_net_namespace,
-                              int length_of_path);
+                              int length_of_path,
+                              unsigned char* static_fields_hash);
 int lir_packet_forward(struct sk_buff* skb, struct net_device* output_dev, struct net* current_net_namespace);
 int lir_local_deliver_finish(struct net *net, struct sk_buff *skb);
 void lir_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol);

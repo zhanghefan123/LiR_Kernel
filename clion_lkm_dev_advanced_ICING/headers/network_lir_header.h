@@ -25,7 +25,8 @@ struct lirhdr {
     __sum16	check;          // 校验和
     __u16 source;           // 源节点编号 -- use to fragment can't delete
     __u16 destination;      // 目的节点编号 -- use to fragment can't delete
-    __u16 length_of_path;   // 路径的长度
+    __u16 length_of_path;   // 路径的长
+    __u16 app_length;       // app 消息的长度
     __u16 current_path_index;    // current path of index
 };
 

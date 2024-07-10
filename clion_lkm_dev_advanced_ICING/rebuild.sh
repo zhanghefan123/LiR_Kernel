@@ -1,3 +1,3 @@
-sudo rmmod lir
+sudo rmmod icing
 make
-sudo insmod lir.ko
+sudo insmod icing.ko

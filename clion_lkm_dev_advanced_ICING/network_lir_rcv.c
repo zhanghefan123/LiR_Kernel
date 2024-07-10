@@ -471,8 +471,9 @@ bool validate_packet(struct lirhdr *lir_header,
                      int current_path_index,
                      struct net *current_net_namespace,
                      int source_satellite_id,
-                     int current_satellite_id) {
-    unsigned char *static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, current_net_namespace);
+                     int current_satellite_id,
+                     unsigned char* static_fields_hash) {
+    // unsigned char *static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, current_net_namespace);
     struct shash_desc *hmac_data_structure = get_hmac_data_structure(current_net_namespace);
     bool validation_result;
     if (current_path_index == 0) {
@@ -523,7 +524,7 @@ bool validate_packet(struct lirhdr *lir_header,
         }
         kfree(hmac_result_final);
     }
-    kfree(static_fields_hash);
+    // kfree(static_fields_hash);
     return validation_result;
 }
 
@@ -533,8 +534,9 @@ void update_validation_fields(struct lirhdr* lir_header,
                               int current_path_index,
                               int current_satellite_id,
                               struct net* current_net_namespace,
-                              int length_of_path){
-    unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header,current_net_namespace); // calculate hash
+                              int length_of_path,
+                              unsigned char* static_fields_hash){
+    // unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header,current_net_namespace); // calculate hash
     struct shash_desc* hmac_data_structure = get_hmac_data_structure(current_net_namespace); // get hmac data structure
     int index;
     for(index = current_path_index + 1; index < length_of_path; index++){
@@ -548,13 +550,13 @@ void update_validation_fields(struct lirhdr* lir_header,
         XOR_MEMORY((unsigned char*)(&(validation_list[index])), hmac_result, ICING_VALIDATION_SIZE_IN_BYTES);
         kfree(hmac_result);
     }
-    kfree(static_fields_hash);
-
+    // kfree(static_fields_hash);
 }
 
 int
 lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
-    struct lirhdr *lir_header = lir_hdr(skb);                     // 首先获取数据包的头部
+    struct lirhdr *lir_header = lir_hdr(skb);                     // 首先获取数据包的网络层头部
+    struct udphdr *udp_header = udp_hdr(skb);                     // 获取传输曾头部
     int current_path_index = ntohs(lir_header->current_path_index);            // 获取当前的索引
     int length_of_path = ntohs(lir_header->length_of_path);             // 获取总长度
     struct NewInterfaceTable *new_interface_table = get_new_interface_table_from_net_namespace(current_net_namespace); // 获取接口表
@@ -567,6 +569,10 @@ lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk
     __u32 current_link_identifier = icing_path[current_path_index].tag; // 根据当前的 index 拿到 link identifier
     int current_satellite_id = get_satellite_id(current_net_namespace); // 拿到当前的卫星 id
     int source_satellite_id = ntohs(lir_header->source);
+    int app_length = lir_header->app_length; // app 字段长度
+    printk(KERN_EMERG "app length = %d\n", app_length);
+    printk(KERN_EMERG "udp sport = %d dport=%d\n", ntohs(udp_header->source), ntohs(udp_header->dest));
+    unsigned char* static_fields_hash;  // 静态字段的哈希
     // =========================  find previous node sequence=========================
     print_upstream_node_sequence(icing_path, current_path_index, source_satellite_id); // 打印上游节点
     // =========================  find previous node sequence=========================
@@ -575,11 +581,16 @@ lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk
     print_downstream_node_sequence(icing_path, current_path_index, length_of_path);  // 打印下游节点
     // ========================  find downstream node sequence========================
 
+    // ========================  calculate hash values ===============================
+    static_fields_hash = calculate_static_fields_hash_of_icing(lir_header, udp_header,current_net_namespace, length_of_path, app_length);
+    // ========================  calculate hash values ===============================
+
     // ========================  validate the packet ========================
     bool packet_validation_result = validate_packet(lir_header, icing_path,
                                                     validation_list, current_path_index,
                                                     current_net_namespace, source_satellite_id,
-                                                    current_satellite_id);
+                                                    current_satellite_id,
+                                                    static_fields_hash);
     // ========================  validate the packet ========================
     // ======================== update the validation field =======================
     if(!packet_validation_result){
@@ -589,9 +600,14 @@ lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk
         update_validation_fields(lir_header, icing_path,
                                  validation_list, current_path_index,
                                  current_satellite_id, current_net_namespace,
-                                 length_of_path);
+                                 length_of_path,
+                                 static_fields_hash);
     }
     // ======================== update the validation field =======================
+
+    // ======================== release the memory ======================
+    kfree(static_fields_hash);
+    // ======================== release the memory ======================
 
     // ================== traverse the interface entry in interface table ==================
     int index;

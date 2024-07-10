@@ -72,7 +72,7 @@ unsigned char* calculate_payload_hash(struct udphdr* udp_header, struct net* net
     char* app_start = (char*)(udp_header) + sizeof(struct udphdr); // 获取 app 起始的位置
     struct shash_desc* hash_data_structure = get_hash_data_structure(net);  // 获取哈希数据结构
     unsigned char* static_fields_hash = calculate_hash(hash_data_structure, app_start);  // 获取payload哈希
-    print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES); // 输出哈希结果
+    // print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES); // 输出哈希结果
     return static_fields_hash;
 }
 

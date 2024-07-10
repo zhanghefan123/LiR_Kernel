@@ -561,7 +561,7 @@ void print_first_lir_packet(struct net *current_net_namespace,
     LOG_WITH_EDGE("RECEIVED FIRST OPT PACKET");
     unsigned char *path_hash = calculate_fixed_length_hash(hash_data_structure, extension_header_start,
                                                            extension_header_length);
-    print_hash_or_hmac_result(path_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
+    // print_hash_or_hmac_result(path_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
     kfree(path_hash);
     printk(KERN_EMERG "path length = %d\n", path_length);
     for (index = 0; index < path_length + 1; index++) {
@@ -661,7 +661,7 @@ int forward_and_deliver_first_skb(struct sk_buff *skb, struct net *current_net_n
     int source_satellite_id = ntohs(lir_header->source);
     int destination_satellite_id = ntohs(lir_header->destination);
     // -------------------------------- PRINT PATH --------------------------------
-    print_first_lir_packet(current_net_namespace, extension_header_start, extension_header_length, path_length, path);
+    // print_first_lir_packet(current_net_namespace, extension_header_start, extension_header_length, path_length, path);
     output_dev = store_in_session_path_table(session_path_table, new_interface_table,
                                              path, path_length, current_path_index,
                                              source_satellite_id, destination_satellite_id, current_satellite_id);
@@ -672,7 +672,7 @@ int forward_and_deliver_first_skb(struct sk_buff *skb, struct net *current_net_n
     } else {
         lir_header->current_path_index = htons(current_path_index + 1);
         lir_packet_forward(skb, output_dev, current_net_namespace);
-        printk(KERN_EMERG "The packet should be forwarded from %s\n", output_dev->name);
+        // printk(KERN_EMERG "The packet should be forwarded from %s\n", output_dev->name);
         return NET_RX_DROP;
     }
 }
@@ -686,7 +686,7 @@ int forward_and_deliver_first_skb(struct sk_buff *skb, struct net *current_net_n
  */
 int handle_first_opt_packet(struct net *current_net_namespace, struct sk_buff *skb, struct net_device *dev) {
     // ----------------   log the packet  ----------------
-    LOG_WITH_PREFIX("RECEIVED FIRST LIR PACKET");
+    // LOG_WITH_PREFIX("RECEIVED FIRST LIR PACKET");
     // ----------------   log the packet  ----------------
     return forward_and_deliver_first_skb(skb, current_net_namespace);
 }
@@ -723,9 +723,9 @@ int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *
         bool same = COMPARE_MEMORY((unsigned char *) (&opvs[current_index]), opv_hmac_result, OPT_VALIDATION_SIZE_IN_BYTES);  // 进行内存比较
         kfree(opv_hmac_result);
         if (same) { // 如果结果一致说明验证通过, 这个时候 payload hash 还没有被释放，所以最后要注意进行释放
-            LOG_WITH_PREFIX("VALIDATION PASSED");
+            // LOG_WITH_PREFIX("VALIDATION PASSED");
         } else {  // 如果结果不一致，说明验证不通过，释放所有的 hash 以及 hmac 计算结果，以及skb
-            LOG_WITH_PREFIX("VALIDATION NOT PASSED");
+            // LOG_WITH_PREFIX("VALIDATION NOT PASSED");
             kfree_skb(skb);
             return NET_RX_DROP;
         }
@@ -757,8 +757,8 @@ int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *
                     kfree(hmac_result_pvf);
                 }
             }
-            print_hash_or_hmac_result(temp_result, OPT_VALIDATION_SIZE_IN_BYTES);
-            print_hash_or_hmac_result(pvf_pointer, OPT_VALIDATION_SIZE_IN_BYTES);
+//            print_hash_or_hmac_result(temp_result, OPT_VALIDATION_SIZE_IN_BYTES);
+//            print_hash_or_hmac_result(pvf_pointer, OPT_VALIDATION_SIZE_IN_BYTES);
             kfree(payload_hash);  // 释放 payload hash
             return NET_RX_SUCCESS;
         } else { // 如果数据包并非本地交付，需要进行转发
@@ -771,7 +771,7 @@ int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *
             kfree(pvf_hmac_result); // 释放 hmac_result
             // -------------------------------------------------- pvf 字段更新 --------------------------------------------------
             lir_packet_forward(skb, session_path_table_entry->output_device, current_net_namespace);
-            printk(KERN_EMERG "The packet should be forwarded from %s\n", session_path_table_entry->output_device->name);
+//            printk(KERN_EMERG "The packet should be forwarded from %s\n", session_path_table_entry->output_device->name);
             kfree(payload_hash);  // 释放 payload hash
             return NET_RX_DROP;
         }
