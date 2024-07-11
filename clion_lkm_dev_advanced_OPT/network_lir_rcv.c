@@ -405,14 +405,15 @@ struct sk_buff *lir_rcv_core(struct sk_buff *skb, struct net *net) {
  * @return
  */
 int lir_rcv_finish(struct net *net, struct sk_buff *skb, u64 start) {
-    // u64 time_elapsed;
+    u64 time_elapsed;
     struct net_device *dev = skb->dev;
     int ret;
     ret = lir_rcv_finish_core(net, skb, dev);
-    // time_elapsed = ktime_get_real_ns() - start;
-    if (ret != NET_RX_DROP) {
+    time_elapsed = ktime_get_real_ns() - start;
+    if (ret != NET_RX_DROP) { // 本地收包
         ret = lir_local_deliver(skb);
-        // printk(KERN_EMERG "local deliver\n");
+    } else {
+        printk(KERN_EMERG "opt_forward_time_elapsed: %llu ns\n", time_elapsed);
     }
     return ret;
 }
