@@ -28,8 +28,22 @@ struct lirhdr {
     __u16 current_path_index; // 当前的索引
 };
 
+
+// 将这个字段单独拿出来不放在 header 之中是因为第一个包需要这个字段而后续的包不需要
 struct length_of_path{
     __u16 length_of_path;
+};
+
+// DATA HASH 字段
+struct data_hash {
+    u64 data_hash1;
+    u64 data_hash2;
+};
+
+// SESSIONID 字段
+struct sessionid {
+    u64 sessionid1;
+    u64 sessionid2;
 };
 
 // SINGLE HOP OPT

@@ -13,6 +13,8 @@
 #define HASH_OUTPUT_LENGTH_IN_BYTES 32
 #define HMAC_OUTPUT_LENGTH_IN_BYTES 32
 #define OPT_VALIDATION_SIZE_IN_BYTES 16
+#define SESSION_ID_SIZE_IN_BYTES 16
+unsigned char* calculate_session_id(struct net* net, char* route_str_repr);
 struct shash_desc* generate_hash_data_structure(void);
 struct shash_desc* generate_hmac_data_structure(void);
 unsigned char* calculate_static_fields_hash_of_lir(struct lirhdr* lir_header, struct net* net);
@@ -22,4 +24,5 @@ unsigned char* calculate_hash(struct shash_desc* hash_data_structure, char* data
 unsigned char* calculate_fixed_length_hash(struct shash_desc* hash_data_structure, unsigned char* data, int length_of_data);
 unsigned char* calculate_hmac(struct shash_desc* hmac_data_structure, unsigned char* data, int length_of_data, char* key);
 void print_hash_or_hmac_result(unsigned char* output, int length);
+unsigned char* calculate_static_fields_hash_of_multiple_memory_blocks(char** memory_blocks, int* size_of_each_block, int block_size, struct net* net);
 #endif // ZEUSNET_KERNEL_CRYPTO_FUNCTION_H

@@ -6,6 +6,18 @@
 #include <crypto/dh.h>
 #include <crypto/kpp.h>
 
+/**
+ * @param net 网络命名空间
+ * @param route_str_repr 路径的字符串表示
+ * @return 计算出来的 SESSIONID (只进行 path 的哈希)
+ */
+unsigned char* calculate_session_id(struct net* net, char* route_str_repr){
+    struct shash_desc* hash_data_structure = get_hash_data_structure(net);
+    unsigned char* path_hash = calculate_hash(hash_data_structure, route_str_repr);  // 获取payload哈希
+    print_hash_or_hmac_result(path_hash, HASH_OUTPUT_LENGTH_IN_BYTES); // 输出哈希结果
+    return path_hash;
+}
+
 struct shash_desc* generate_hash_data_structure(void){
     struct crypto_shash* tfm;
     struct shash_desc *shash;
@@ -23,6 +35,36 @@ struct shash_desc* generate_hash_data_structure(void){
     }
     shash->tfm = tfm;
     return shash;
+}
+
+/**
+ * 计算多个不同的区块之中的哈希值
+ * @param memory_blocks 内存的区块
+ * @param size_of_each_block 每个区块的大小
+ * @param block_size 单个区块的大小
+ */
+unsigned char* calculate_static_fields_hash_of_multiple_memory_blocks(char** memory_blocks, int* size_of_each_block, int block_size, struct net* net){
+    int index;  // 当前处理的内存块的索引
+    struct shash_desc* hash_data_structure = get_hash_data_structure(net);  // hash 数据结构
+    unsigned char* output = kmalloc(sizeof(unsigned char) * HASH_OUTPUT_LENGTH_IN_BYTES, GFP_KERNEL); // 哈希的输出结果
+    if(crypto_shash_init(hash_data_structure)){
+        return NULL;
+    }
+    for(index=0; index < (block_size); index++){  // 进行所有的内存块的遍历，并进行哈希值的更新
+        int size_of_block = size_of_each_block[index];
+        char* memory_block = memory_blocks[index];
+        printk(KERN_EMERG "memory block %d block size %d\n", index, size_of_block);
+        print_hash_or_hmac_result((unsigned char*)(memory_blocks[index]), size_of_block);
+        if(crypto_shash_update(hash_data_structure, memory_block, size_of_block)){
+            return NULL;
+        }
+    }
+    // 进行结果的输出
+    if(crypto_shash_final(hash_data_structure, output)){
+        return NULL;
+    }
+    print_hash_or_hmac_result(output, HASH_OUTPUT_LENGTH_IN_BYTES);
+    return output;
 }
 
 struct shash_desc* generate_hmac_data_structure(void){
@@ -72,7 +114,7 @@ unsigned char* calculate_payload_hash(struct udphdr* udp_header, struct net* net
     char* app_start = (char*)(udp_header) + sizeof(struct udphdr); // 获取 app 起始的位置
     struct shash_desc* hash_data_structure = get_hash_data_structure(net);  // 获取哈希数据结构
     unsigned char* static_fields_hash = calculate_hash(hash_data_structure, app_start);  // 获取payload哈希
-    // print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES); // 输出哈希结果
+    print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES); // 输出哈希结果
     return static_fields_hash;
 }
 

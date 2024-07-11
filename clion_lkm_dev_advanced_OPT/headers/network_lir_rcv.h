@@ -45,7 +45,7 @@ void print_first_lir_packet(struct net *current_net_namespace,
 
 struct net_device *
 store_in_session_path_table(struct hlist_head *session_path_table, struct NewInterfaceTable *new_interface_table,
-                            struct single_hop_field *path,
+                            struct single_hop_field *path,unsigned char* session_id_pointer,
                             int length_of_path, int current_index,
                             int source, int destination, int current_satellite_id);
 

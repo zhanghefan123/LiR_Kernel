@@ -18,6 +18,22 @@ void init_or_update_network_sk_data(struct sock *sock){
     }
 }
 
+void set_session_id(struct sock* sock, u64 sessionid1, u64 sessionid2){
+    if(sock->sk_user_data){
+        struct NetworkSkData* network_sk_data = (struct NetworkSkData*)(sock->sk_user_data);
+        network_sk_data->sessionid1 = sessionid1;
+        network_sk_data->sessionid2 = sessionid2;
+    }
+}
+
+struct NetworkSkData* get_network_sk_data(struct sock* sock){
+    if(sock->sk_user_data){
+        return (struct NetworkSkData*)(sock->sk_user_data);
+    } else {
+        return NULL;
+    }
+}
+
 bool get_first_packet_status(struct sock* sock){
     if(sock->sk_user_data){
         struct NetworkSkData* network_sk_data = (struct NetworkSkData*)(sock->sk_user_data);

@@ -14,7 +14,8 @@ void fill_opt_field(struct lirhdr *lir_header,
                     struct LirReturnDataStructure *lir_return_data_structure,
                     struct net *current_net_namespace,
                     bool first_packet,
-                    unsigned char* payload_hash);
+                    unsigned char* payload_hash,
+                    struct sock* sk);
 
 void resolve_lir_make_skb_inner_functions_address(void);
 

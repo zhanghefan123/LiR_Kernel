@@ -481,6 +481,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
     lir_header->source = htons(source_node_id);
     lir_header->destination = htons(destination_node_id);
     lir_header->current_path_index = htons(0);
+    lir_header->total_len = htons(skb->len); // 本来在 lir_send_skb 之中
     lir_select_id(net, skb, sk, 1, source_node_id, destination_node_id);
     fill_lir_header_length(lir_header, lir_return_data_structure);
     // fill_lir_header_option_part(skb, lir_return_data_structure);
@@ -578,7 +579,7 @@ int lir_send_skb(struct net *net, struct sk_buff *skb, struct net_device *output
     struct lirhdr *lir_header = lir_hdr(skb);
     struct sock *sk = skb->sk;
 
-    lir_header->total_len = htons(skb->len);
+    // lir_header->total_len = htons(skb->len);
     lir_send_check(lir_header);
 
     skb->protocol = htons(ETH_P_IP);

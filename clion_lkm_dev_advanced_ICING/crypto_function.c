@@ -97,11 +97,9 @@ unsigned char *calculate_static_fields_hash_of_icing(struct lirhdr *lir_header,
     __u16 original_current_path_index = lir_header->current_path_index; // 提前进行 current_path_index 的存储，因为其不纳入计算
     __u16 original_check_sum = lir_header->check;
     __u16 original_id = lir_header->id;
-    __u16 original_total_length = lir_header->total_len;
     lir_header->id = 0;
     lir_header->current_path_index = 0; // 将不纳入哈希计算的字段置为0
     lir_header->check = 0; // 不将check纳入哈希计算
-    lir_header->total_len = 0; // 不纳入计算
     int size_of_lir_header_and_icing_path = (int)(sizeof(struct lirhdr)) + size_of_icing_path; // LIR 标准头长度 + ICING 路径的长度
     size_of_each_block[0] = size_of_lir_header_and_icing_path;
     // --------------------------------------- 创建第一个 memory block ---------------------------------------
@@ -117,7 +115,6 @@ unsigned char *calculate_static_fields_hash_of_icing(struct lirhdr *lir_header,
     lir_header->current_path_index = original_current_path_index;
     lir_header->check = original_check_sum;
     lir_header->id = original_id;
-    lir_header->total_len = original_total_length;
     // ---------------------------------------      进行字段的还原      ---------------------------------------
     return output;
 }
