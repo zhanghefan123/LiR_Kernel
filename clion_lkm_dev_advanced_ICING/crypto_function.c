@@ -60,8 +60,8 @@ unsigned char* calculate_static_fields_hash_of_multiple_memory_blocks(char** mem
     for(index=0; index < (block_size); index++){  // 进行所有的内存块的遍历，并进行哈希值的更新
         int size_of_block = size_of_each_block[index];
         char* memory_block = memory_blocks[index];
-        printk(KERN_EMERG "memory block %d block size %d\n", index, size_of_block);
-        print_hash_or_hmac_result((unsigned char*)(memory_blocks[index]), size_of_block);
+        // printk(KERN_EMERG "memory block %d block size %d\n", index, size_of_block);
+        // print_hash_or_hmac_result((unsigned char*)(memory_blocks[index]), size_of_block);
         if(crypto_shash_update(hash_data_structure, memory_block, size_of_block)){
             return NULL;
         }
@@ -70,7 +70,7 @@ unsigned char* calculate_static_fields_hash_of_multiple_memory_blocks(char** mem
     if(crypto_shash_final(hash_data_structure, output)){
         return NULL;
     }
-    print_hash_or_hmac_result(output, HASH_OUTPUT_LENGTH_IN_BYTES);
+    // print_hash_or_hmac_result(output, HASH_OUTPUT_LENGTH_IN_BYTES);
     return output;
 }
 

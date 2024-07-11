@@ -412,7 +412,7 @@ int lir_rcv_finish(struct net *net, struct sk_buff *skb, u64 start) {
     // time_elapsed = ktime_get_real_ns() - start;
     if (ret != NET_RX_DROP) {
         ret = lir_local_deliver(skb);
-        printk(KERN_EMERG "local deliver\n");
+        // printk(KERN_EMERG "local deliver\n");
     }
     return ret;
 }
@@ -486,10 +486,10 @@ bool validate_packet(struct lirhdr *lir_header,
         bool same = COMPARE_MEMORY((unsigned char *) (&validation_list[current_path_index]), hmac_result,
                                    ICING_VALIDATION_SIZE_IN_BYTES);
         if (same) {
-            LOG_WITH_PREFIX("VALIDATION PASSED");
+            // LOG_WITH_PREFIX("VALIDATION PASSED");
             validation_result = true;
         } else {
-            LOG_WITH_PREFIX("VALIDATION NOT PASSED");
+            // LOG_WITH_PREFIX("VALIDATION NOT PASSED");
             validation_result = false;
         }
         // print_hash_or_hmac_result(hmac_result, ICING_VALIDATION_SIZE_IN_BYTES);
@@ -516,7 +516,7 @@ bool validate_packet(struct lirhdr *lir_header,
         bool same = COMPARE_MEMORY((unsigned char *) (&validation_list[current_path_index]), hmac_result_final,
                                     ICING_VALIDATION_SIZE_IN_BYTES);
         if (same) {
-            LOG_WITH_PREFIX("VALIDATION PASSED");
+            // LOG_WITH_PREFIX("VALIDATION PASSED");
             validation_result = true;
         } else {
             LOG_WITH_PREFIX("VALIDATION NOT PASSED");
@@ -570,15 +570,15 @@ lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk
     int current_satellite_id = get_satellite_id(current_net_namespace); // 拿到当前的卫星 id
     int source_satellite_id = ntohs(lir_header->source);
     int app_length = lir_header->app_length; // app 字段长度
-    printk(KERN_EMERG "app length = %d\n", app_length);
-    printk(KERN_EMERG "udp sport = %d dport=%d\n", ntohs(udp_header->source), ntohs(udp_header->dest));
+    //    printk(KERN_EMERG "app length = %d\n", app_length);
+    //    printk(KERN_EMERG "udp sport = %d dport=%d\n", ntohs(udp_header->source), ntohs(udp_header->dest));
     unsigned char* static_fields_hash;  // 静态字段的哈希
     // =========================  find previous node sequence=========================
-    print_upstream_node_sequence(icing_path, current_path_index, source_satellite_id); // 打印上游节点
+    // print_upstream_node_sequence(icing_path, current_path_index, source_satellite_id); // 打印上游节点
     // =========================  find previous node sequence=========================
 
     // ========================  find downstream node sequence========================
-    print_downstream_node_sequence(icing_path, current_path_index, length_of_path);  // 打印下游节点
+    // print_downstream_node_sequence(icing_path, current_path_index, length_of_path);  // 打印下游节点
     // ========================  find downstream node sequence========================
 
     // ========================  calculate hash values ===============================
@@ -617,16 +617,16 @@ lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk
         if (entry_corresponding_link_identifier == current_link_identifier) {
             lir_header->current_path_index = htons(current_path_index + 1);
             lir_packet_forward(skb, new_interface_entry.interface, current_net_namespace);
-            printk(KERN_EMERG "The packet should be forwarded from %s\n", new_interface_entry.interface->name);
+            // printk(KERN_EMERG "The packet should be forwarded from %s\n", new_interface_entry.interface->name);
         }
     }
     // ================== traverse the interface entry in interface table ==================
     // ================== judge if local deliver ==================
-    printk(KERN_EMERG "current_path_index:%d length_of_path: %d", current_path_index, length_of_path);
+    // printk(KERN_EMERG "current_path_index:%d length_of_path: %d", current_path_index, length_of_path);
     bool local_deliver = (current_path_index == (length_of_path - 1));
     if (local_deliver) {
-        printk(KERN_EMERG "The packet should be local delivered in current satellite with satellite id %d\n",
-               current_satellite_id);
+        // printk(KERN_EMERG "The packet should be local delivered in current satellite with satellite id %d\n",
+        //       current_satellite_id);
         return NET_RX_SUCCESS;
     } else {
         return NET_RX_DROP;

@@ -412,7 +412,7 @@ int lir_rcv_finish(struct net *net, struct sk_buff *skb, u64 start) {
     // time_elapsed = ktime_get_real_ns() - start;
     if (ret != NET_RX_DROP) {
         ret = lir_local_deliver(skb);
-        printk(KERN_EMERG "local deliver\n");
+        // printk(KERN_EMERG "local deliver\n");
     }
     return ret;
 }
@@ -584,7 +584,7 @@ store_in_session_path_table(struct hlist_head *session_path_table, struct NewInt
     bool is_destination = (current_satellite_id == destination);
     // -------------------------------- get session id -------------------------------------
     memcpy(&(session_path_table_entry->sessionid1), session_id_pointer, SESSION_ID_SIZE_IN_BYTES);
-    print_hash_or_hmac_result(session_id_pointer, SESSION_ID_SIZE_IN_BYTES);
+    // print_hash_or_hmac_result(session_id_pointer, SESSION_ID_SIZE_IN_BYTES);
     // -------------------------------- get session id -------------------------------------
     // -------------------------------- get encrypt sequence -------------------------------
     if (is_destination) {

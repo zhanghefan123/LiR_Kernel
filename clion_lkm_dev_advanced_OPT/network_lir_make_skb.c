@@ -584,9 +584,6 @@ void fill_opt_field(struct lirhdr *lir_header,
         struct shash_desc *hmac_data_structure = lir_data_structure->hmac_data_structure; // 获取 hmac_data_structure
         int current_satellite_id = lir_data_structure->satellite_id; // 获取当前卫星id
 
-        //        int pvf_size = sizeof(struct path_validation_field);  // pvf 字段的长度 (单位为字节)
-        //        int opvs_size = (int) (sizeof(struct origin_path_validation_field)) * length_of_path; // ovfs 字段的长度 (单位为字节)
-
         // ---------------------------- fill session id field --------------------------
         u64 * session_id_pointer = (u64 *) (&(lir_header[1])); // 获取指向了 sessionid 在数据包之中存储位置的指针
         struct NetworkSkData *network_sk_data = get_network_sk_data(sk);
@@ -653,15 +650,6 @@ void fill_opt_field(struct lirhdr *lir_header,
                 pvfi_hmac_result = pvf_new_hmac_result;
             }
         }
-        //        unsigned char *copy_source = (unsigned char *) (pvf);
-        //        unsigned char *copy_destination = ((unsigned char *) lir_header) + sizeof(struct lirhdr);
-        //        memcpy(copy_destination, copy_source, pvf_size);
-        //
-        //        copy_source = (unsigned char *) (opvs);
-        //        copy_destination = ((unsigned char *) lir_header) + sizeof(struct lirhdr) + pvf_size;
-        //        memcpy(copy_destination, copy_source, opvs_size);
-        //        kfree(pvf);
-        //        kfree(opvs);
         // ----------------------------place into lirheader------------------------------
     }
 }
