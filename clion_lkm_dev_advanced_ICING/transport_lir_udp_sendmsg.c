@@ -62,8 +62,7 @@ int lir_udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len){
                                msg->msg_flags, getfrag, msg,
                                &cork, &ipc,
                                source_node_id,
-                               destination_node_id,
-                               len);
+                               destination_node_id);
     err = PTR_ERR(skb_to_sent);
     // --------------     create skb (IP)    --------------
 

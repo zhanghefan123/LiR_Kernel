@@ -507,6 +507,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
         df = htons(IP_DF);
     lir_header = lir_hdr(skb);
     set_lir_header_version(lir_header, first_packet);
+    lir_header->current_hop = 1;
     lir_header->protocol = sk->sk_protocol; // udp upper layer protocol
     lir_header->frag_off = df;
     lir_header->source = htons(source_node_id);

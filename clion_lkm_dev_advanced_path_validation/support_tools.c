@@ -66,3 +66,35 @@ void LOG_RESOLVED(void* pointer, const char* function_name){
         LOG_WITH_PREFIX("error");
     }
 }
+
+/**
+ * 进行两块内存的比较
+ * @param first_memory 第一块内存
+ * @param second_memory 第二块内存
+ * @param length_in_bytes  两块内存的长度
+ * @return
+ */
+bool COMPARE_MEMORY(const unsigned char* first_memory, const unsigned char* second_memory, int length_in_bytes){
+    int index;
+    bool same = true;
+    for(index = 0; index < length_in_bytes; index++){
+        if(first_memory[index] != second_memory[index]){
+            same = false;
+            break;
+        }
+    }
+    return same;
+}
+
+/**
+ * 进行两块内存的异或的操作
+ * @param destination_memory 第一块内存
+ * @param source_memory  第二块内存
+ * @param length_in_bytes  两块内存的长度
+ */
+void XOR_MEMORY(unsigned char* destination_memory, const unsigned char* source_memory, int length_in_bytes){
+    int index;
+    for(index = 0; index < length_in_bytes; index++){
+        destination_memory[index] = destination_memory[index] ^ source_memory[index];
+    }
+}

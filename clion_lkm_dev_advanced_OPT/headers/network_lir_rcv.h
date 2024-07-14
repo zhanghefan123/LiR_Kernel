@@ -4,7 +4,7 @@
 
 #ifndef ZEUSNET_KERNEL_NETWORK_LIR_IP_RCV_H
 #define ZEUSNET_KERNEL_NETWORK_LIR_IP_RCV_H
-
+#define NET_RX_FIRST_HOP_PACKET 2
 #include <net/ip.h>
 #include "network_lir_header.h"
 #include "support_ftrace_hook_api.h"

@@ -410,11 +410,12 @@ int lir_rcv_finish(struct net *net, struct sk_buff *skb, u64 start) {
     int ret;
     ret = lir_rcv_finish_core(net, skb, dev);
     time_elapsed = ktime_get_real_ns() - start;
-    if (ret != NET_RX_DROP) {
+    if (ret == NET_RX_SUCCESS) {
         ret = lir_local_deliver(skb);
         // printk(KERN_EMERG "local deliver\n");
-    } else {
+    } else if (ret == NET_RX_FIRST_HOP) {
         printk(KERN_EMERG "icing_forward_time_elapsed: %llu ns\n", time_elapsed);
+        ret = NET_RX_DROP;
     }
     return ret;
 }
@@ -571,9 +572,13 @@ lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk
     __u32 current_link_identifier = icing_path[current_path_index].tag; // 根据当前的 index 拿到 link identifier
     int current_satellite_id = get_satellite_id(current_net_namespace); // 拿到当前的卫星 id
     int source_satellite_id = ntohs(lir_header->source);
-    int app_length = lir_header->app_length; // app 字段长度
-    //    printk(KERN_EMERG "app length = %d\n", app_length);
-    //    printk(KERN_EMERG "udp sport = %d dport=%d\n", ntohs(udp_header->source), ntohs(udp_header->dest));
+    // first packet
+    bool first_hop_packet = false;
+    // update current hop
+    if (lir_header->current_hop == 1){
+        lir_header->current_hop = lir_header->current_hop + 1;
+        first_hop_packet = true;
+    }
     unsigned char* static_fields_hash;  // 静态字段的哈希
     // =========================  find previous node sequence=========================
     // print_upstream_node_sequence(icing_path, current_path_index, source_satellite_id); // 打印上游节点
@@ -584,7 +589,7 @@ lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk
     // ========================  find downstream node sequence========================
 
     // ========================  calculate hash values ===============================
-    static_fields_hash = calculate_static_fields_hash_of_icing(lir_header, udp_header,current_net_namespace, length_of_path, app_length);
+    static_fields_hash = calculate_static_fields_hash_of_icing(lir_header, udp_header,current_net_namespace, length_of_path);
     // ========================  calculate hash values ===============================
 
     // ========================  validate the packet ========================
@@ -627,11 +632,13 @@ lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struct sk
     // printk(KERN_EMERG "current_path_index:%d length_of_path: %d", current_path_index, length_of_path);
     bool local_deliver = (current_path_index == (length_of_path - 1));
     if (local_deliver) {
-        // printk(KERN_EMERG "The packet should be local delivered in current satellite with satellite id %d\n",
-        //       current_satellite_id);
         return NET_RX_SUCCESS;
     } else {
-        return NET_RX_DROP;
+        if(first_hop_packet){
+            return NET_RX_FIRST_HOP;
+        } else {
+            return NET_RX_DROP;
+        }
     }
 }
 

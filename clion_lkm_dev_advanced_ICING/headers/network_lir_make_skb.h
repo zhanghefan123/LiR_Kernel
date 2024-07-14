@@ -13,8 +13,7 @@ int get_icing_validation_size(struct LirReturnDataStructure *lir_return_data_str
 void fill_icing_field(struct udphdr *udp_header,
                       struct lirhdr *lir_header,
                       struct LirReturnDataStructure *lir_return_data_structure,
-                      struct net *net,
-                      int app_msg_length);
+                      struct net *net);
 
 void resolve_lir_make_skb_inner_functions_address(void);
 
@@ -28,8 +27,7 @@ struct sk_buff *lir_make_skb(struct sock *sk,
                              struct inet_cork *cork,
                              struct ipcm_cookie *ipc,
                              __u16 source_node_id,
-                             __u16 destination_node_id,
-                             int app_msg_length);
+                             __u16 destination_node_id);
 
 int lir_setup_cork(struct sock *sk,
                    struct inet_cork *cork,
@@ -54,8 +52,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
                                   struct inet_cork *cork,
                                   struct LirReturnDataStructure *lir_return_data_structure,
                                   __u16 source_node_id,
-                                  __u16 destination_node_id,
-                                  int app_msg_length);
+                                  __u16 destination_node_id);
 
 void fill_lir_header_option_part(struct sk_buff *skb, struct LirReturnDataStructure *lir_return_data_structure);
 

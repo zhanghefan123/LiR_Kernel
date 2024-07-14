@@ -410,10 +410,11 @@ int lir_rcv_finish(struct net *net, struct sk_buff *skb, u64 start) {
     int ret;
     ret = lir_rcv_finish_core(net, skb, dev);
     time_elapsed = ktime_get_real_ns() - start;
-    if (ret != NET_RX_DROP) { // 本地收包
+    if (ret == NET_RX_SUCCESS) { // 本地收包
         ret = lir_local_deliver(skb);
-    } else {
+    } else if(ret == NET_RX_FIRST_HOP_PACKET){
         printk(KERN_EMERG "opt_forward_time_elapsed: %llu ns\n", time_elapsed);
+        ret = NET_RX_DROP;
     }
     return ret;
 }
@@ -684,6 +685,13 @@ int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *
     struct SessionPathTableEntry *session_path_table_entry = find_entry_in_session_path_table(session_path_table,
                                                                                               sessionid[0],
                                                                                               sessionid[1]);  // 通过源和目的进行表项的获取
+    // first packet
+    bool first_hop_packet = false;
+    // update current hop
+    if (lir_header->current_hop == 1){
+        lir_header->current_hop = lir_header->current_hop + 1;
+        first_hop_packet = true;
+    }
     if (session_path_table_entry) { // 如果找到了路由表项
         // -------------------------------------------------- opv 字段验证 --------------------------------------------------
         int current_satellite_id = get_satellite_id(current_net_namespace); // 拿到当前卫星的 id
@@ -744,7 +752,12 @@ int handle_other_opt_packets(struct net *current_net_namespace, struct sk_buff *
             // -------------------------------------------------- pvf 字段更新 --------------------------------------------------
             lir_packet_forward(skb, session_path_table_entry->output_device, current_net_namespace);
             kfree(payload_hash);  // 释放 payload hash
-            return NET_RX_DROP;
+
+            if(first_hop_packet){
+                return NET_RX_FIRST_HOP_PACKET;
+            } else {
+                return NET_RX_DROP;
+            }
         }
     } else {  // 如果没有找到路由表项, 则
         LOG_WITH_PREFIX("cannot find session table entry");

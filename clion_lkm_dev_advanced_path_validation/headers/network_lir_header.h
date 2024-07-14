@@ -25,6 +25,7 @@ struct lirhdr {
     __sum16	check;          // 校验和
     __u16 source;           // 源节点编号
     __u16 destination;      // 目的节点编号
+    __u16 current_hop;      // 当前已经经过的跳数
     __u32 pvf;              // PVF field
 };
 

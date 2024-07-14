@@ -37,6 +37,5 @@ calculate_static_fields_hash_of_multiple_memory_blocks(char **memory_blocks, int
 unsigned char *calculate_static_fields_hash_of_icing(struct lirhdr *lir_header,
                                                      struct udphdr *udp_header,
                                                      struct net *net,
-                                                     int length_of_path,
-                                                     int app_msg_length);
+                                                     int length_of_path);
 #endif // ZEUSNET_KERNEL_CRYPTO_FUNCTION_H

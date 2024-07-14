@@ -130,7 +130,7 @@ int lir_udp_rcv(struct sk_buff* skb){
     int drop_reason;
     struct udp_table *udptable = &udp_table;
     int proto = IPPROTO_UDP;
-    // LOG_WITH_PREFIX("lir udp rcv called");
+    LOG_WITH_PREFIX("lir udp rcv called");
 
     drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
 

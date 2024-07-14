@@ -98,8 +98,7 @@ struct sk_buff *lir_make_skb(struct sock *sk,
                              struct inet_cork *cork,
                              struct ipcm_cookie *ipc,
                              __u16 source_node_id,
-                             __u16 destination_node_id,
-                             int app_msg_length) {
+                             __u16 destination_node_id) {
     // --------------      initialize        --------------
     struct sk_buff_head queue; // 队列
     int err; // 错误
@@ -123,7 +122,7 @@ struct sk_buff *lir_make_skb(struct sock *sk,
     }
 
     return lir_make_skb_core(sk, &queue, cork, lir_return_data_structure,
-                             source_node_id, destination_node_id, app_msg_length);
+                             source_node_id, destination_node_id);
 }
 
 int get_icing_validation_size(struct LirReturnDataStructure *lir_return_data_structure) {
@@ -434,8 +433,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
                                   struct inet_cork *cork,
                                   struct LirReturnDataStructure *lir_return_data_structure,
                                   __u16 source_node_id,
-                                  __u16 destination_node_id,
-                                  int app_msg_length) {
+                                  __u16 destination_node_id) {
     // --------------      initialize        --------------
     u64 start = ktime_get_real_ns(); // 开始的时间
     u64 time_elapsed;  // 执行的时间
@@ -474,7 +472,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
         df = htons(IP_DF);
     udp_header = udp_hdr(skb);
     lir_header = lir_hdr(skb);
-    lir_header->app_length = app_msg_length;
+    lir_header->current_hop = 1;
     lir_header->version = 5;
     lir_header->protocol = sk->sk_protocol; // udp upper layer protocol
     lir_header->frag_off = df;
@@ -485,7 +483,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
     lir_select_id(net, skb, sk, 1, source_node_id, destination_node_id);
     fill_lir_header_length(lir_header, lir_return_data_structure);
     // fill_lir_header_option_part(skb, lir_return_data_structure);
-    fill_icing_field(udp_header, lir_header, lir_return_data_structure, net, app_msg_length);
+    fill_icing_field(udp_header, lir_header, lir_return_data_structure, net);
     skb->priority = (cork->tos != -1) ? cork->priority : sk->sk_priority;
     skb->mark = cork->mark;
     skb->tstamp = (cork->transmit_time);
@@ -510,8 +508,7 @@ struct sk_buff *lir_make_skb_core(struct sock *sk,
 void fill_icing_field(struct udphdr *udp_header,
                       struct lirhdr *lir_header,
                       struct LirReturnDataStructure *lir_return_data_structure,
-                      struct net *net,
-                      int app_msg_length) {
+                      struct net *net) {
     // 计算哈希值的函数需要进行更改
     struct RoutingTableEntry *routing_table_entry = lir_return_data_structure->routing_table_entry; // 进行路由表条目的获取
     int length_of_path = routing_table_entry->length_of_path;  // 获取路径的长度 if there are three link identifiers / there are total of 4 nodes
@@ -541,7 +538,7 @@ void fill_icing_field(struct udphdr *udp_header,
     // ----------------------- fill validation -----------------------
     int total_allocate_length_for_validation = (int) (sizeof(struct single_node_validation_icing)) * length_of_path; // 每个节点都需要一个验证字段
     unsigned char *static_fields_hash = calculate_static_fields_hash_of_icing(lir_header, udp_header, net,
-                                                                              length_of_path, app_msg_length);
+                                                                              length_of_path);
     // unsigned char* static_fields_hash = calculate_static_fields_hash_of_lir(lir_header, net); // 计算静态字段的哈希
     // print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES); // 打印哈希
     struct shash_desc *hmac_data_structure = get_hmac_data_structure(net); // 通过网络命名空间获取 hmac 密码工具

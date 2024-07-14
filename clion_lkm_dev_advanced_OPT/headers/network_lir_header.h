@@ -25,6 +25,7 @@ struct lirhdr {
     __sum16	check;          // 校验和
     __u16 source;           // 源节点编号 -- use to fragment can't delete
     __u16 destination;      // 目的节点编号 -- use to fragment can't delete
+    __u16 current_hop;      // 当前的跳数
     __u16 current_path_index; // 当前的索引
 };
 

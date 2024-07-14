@@ -432,10 +432,11 @@ int lir_rcv_finish(struct net* net, struct sk_buff *skb, u64 start){
     int ret;
     ret = lir_rcv_finish_core(net, skb, dev);
     time_elapsed = ktime_get_real_ns() - start;
-    if (ret != NET_RX_DROP){
+    if (ret == NET_RX_SUCCESS){
         ret = lir_local_deliver(skb);
-    } else {
-        printk(KERN_EMERG "lir_path_validation take %llu to finish\n", time_elapsed);
+    } else if (ret == NET_RX_FIRST_HOP){
+        printk(KERN_EMERG "bpt_forward_time_elapsed: %llu ns\n", time_elapsed);
+        ret = NET_RX_DROP;
     }
     return ret;
 }
@@ -459,6 +460,8 @@ int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struc
     u8 * opt_data_pointer;
     // lir 头指针
     struct lirhdr *lir_header;
+    // udp 头指针
+    struct udphdr * udp_header;
     // net 之中存储的布隆过滤器
     struct bloom_filter *net_bloom_filter = get_bloom_filter(current_net_namespace);
     // 索引
@@ -473,15 +476,28 @@ int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struc
     int current_satellite_id = get_satellite_id(current_net_namespace);
     // 获取 lir 头
     lir_header = lir_hdr(skb);
+    // 获取 udp 头
+    udp_header = udp_hdr(skb);
+    // first packet
+    bool first_hop_packet = false;
+    // update current hop
+    if (lir_header->current_hop == 1){
+        lir_header->current_hop = lir_header->current_hop + 1;
+        first_hop_packet = true;
+    }
     // 获取目的卫星编号
     destination_node_id = ntohs(lir_header->destination);
+    // printk(KERN_EMERG "current satellite id: %d, destination satellite id: %d\n", current_satellite_id, destination_node_id);
     // 获取 opt 数据部分, 注意这里由于没有调用 ip_options_build 所以我们不能使用 opt->__data。
     opt_data_pointer = (u8 *) &(lir_header[1]);
     // 将 option 字段的内容进行拷贝
     bloom_filter_bitset = net_bloom_filter->bitset;
     net_bloom_filter->bitset = (unsigned long*)(opt_data_pointer); // 不能删除
     // --------------------------------------------- get the static hash of the lir_header ------------------------------------
-    unsigned char* static_fields_hash = get_static_hash(lir_header, current_net_namespace);
+    // unsigned char* static_fields_hash = calculate_static_fields_hash_of_bpt(lir_header, udp_header, current_net_namespace);
+    // unsigned char* static_fields_hash = calculate_static_fields_hash(lir_header, current_net_namespace);
+    // print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
+    unsigned char* static_fields_hash = calculate_static_fields_hash_of_bpt(lir_header, udp_header, current_net_namespace);
     struct shash_desc* hmac_data_structure = get_hmac_data_structure(current_net_namespace);
     int source_satellite_id = ntohs(lir_header->source);
     char key_from_source_to_intermediate[20];
@@ -517,7 +533,11 @@ int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struc
         return NET_RX_SUCCESS;
     } else {
         kfree_skb(skb);
-        return NET_RX_DROP;
+        if (first_hop_packet){
+            return NET_RX_FIRST_HOP;
+        } else {
+            return NET_RX_DROP;
+        }
     }
 }
 

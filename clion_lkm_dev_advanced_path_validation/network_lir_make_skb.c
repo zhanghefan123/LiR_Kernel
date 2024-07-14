@@ -454,10 +454,13 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
                                   __u16 source_node_id,
                                   __u16 destination_node_id){
     // --------------      initialize        --------------
+    u64 start = ktime_get_real_ns();
+    u64 time_elapsed;
     struct sk_buff *skb, *tmp_skb;
     struct sk_buff **tail_skb;
     struct inet_sock *inet = inet_sk(sk);
     struct lirhdr* lir_header;
+    struct udphdr* udp_header;
     struct net* net = sock_net(sk);
     __be16 df = 0;
     skb = __skb_dequeue(queue);
@@ -487,7 +490,9 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
         (skb->len <= lir_return_data_structure->output_interface->mtu))
         df = htons(IP_DF);
 
+    udp_header = udp_hdr(skb); // 拿到 udp 头部
     lir_header = lir_hdr(skb);
+    lir_header->current_hop = 1; // 甚至当前的跳跃数量为1
     lir_header->version = 5;
     lir_header->header_len  = sizeof(struct lirhdr); // without option later will add
     lir_header->protocol = sk->sk_protocol; // udp upper layer protocol
@@ -497,7 +502,8 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
     lir_header->header_len += lir_return_data_structure->bloom_filter->effective_bytes;
     lir_header->header_len = htons(lir_header->header_len); // 最终在进行修改的时候，将字段改过来，改为大端存储
     lir_select_id(net, skb, sk, 1, source_node_id, destination_node_id);
-    unsigned char* hash_of_static_fields = calculate_static_fields_hash(lir_header, net); // 计算静态哈希
+    unsigned char* hash_of_static_fields = calculate_static_fields_hash_of_bpt(lir_header, udp_header, net);
+    // unsigned char* hash_of_static_fields = calculate_static_fields_hash(lir_header, net); // 计算静态哈希
     // ---------------------- get route and fill bloom filter ----------------------
     struct RoutingTableEntry* lir_routing_entry = lir_return_data_structure->routing_table_entry;  // 首先拿到路由表项
     struct shash_desc* hmac_data_structure = get_hmac_data_structure(net);  // 拿到 hmac 结构体
@@ -514,7 +520,7 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
                                           key_from_source_to_intermediate); // 利用密钥源节点和中间节点的对称密钥计算hmac
         if(index != lir_routing_entry->length_of_path - 1){ // 如果不是最后一个元素
             int link_identifier = lir_routing_entry->link_identifiers[index+1];
-            final_insert_element ^= (*hmac_result) ^ (u32)(link_identifier);
+            final_insert_element ^= (*hmac_result) ^ (u32)(link_identifier); // 和转发的链路标识进行异或的操作
         } else {
             final_insert_element ^= (*hmac_result); // 计算插入的元素
         }
@@ -530,6 +536,8 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
     skb->mark = cork->mark;
     skb->tstamp = cork->transmit_time;
     out:
+    time_elapsed = ktime_get_real_ns() - start;
+    printk(KERN_EMERG "bpt_make_skb_time_elapsed: %llu ns\n", time_elapsed);
     return skb;
 }
 

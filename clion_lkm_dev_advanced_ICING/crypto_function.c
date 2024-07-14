@@ -85,8 +85,7 @@ unsigned char* calculate_static_fields_hash_of_multiple_memory_blocks(char** mem
 unsigned char *calculate_static_fields_hash_of_icing(struct lirhdr *lir_header,
                                                      struct udphdr *udp_header,
                                                      struct net *net,
-                                                     int length_of_path,
-                                                     int app_msg_length) {
+                                                     int length_of_path) {
     int block_size = 2;
     char* memory_blocks[block_size]; // 内存区块数组
     int size_of_each_block[block_size]; // 每个内存区块的长度
@@ -97,16 +96,18 @@ unsigned char *calculate_static_fields_hash_of_icing(struct lirhdr *lir_header,
     __u16 original_current_path_index = lir_header->current_path_index; // 提前进行 current_path_index 的存储，因为其不纳入计算
     __u16 original_check_sum = lir_header->check;
     __u16 original_id = lir_header->id;
+    __u16 original_current_hop = lir_header->current_hop;
     lir_header->id = 0;
     lir_header->current_path_index = 0; // 将不纳入哈希计算的字段置为0
     lir_header->check = 0; // 不将check纳入哈希计算
+    lir_header->current_hop = 0;
     int size_of_lir_header_and_icing_path = (int)(sizeof(struct lirhdr)) + size_of_icing_path; // LIR 标准头长度 + ICING 路径的长度
     size_of_each_block[0] = size_of_lir_header_and_icing_path;
     // --------------------------------------- 创建第一个 memory block ---------------------------------------
     // --------------------------------------- 创建第二个 memory block ---------------------------------------
     char* start_of_app_data = (char*)(udp_header) + sizeof(struct udphdr); // 获取 app 的索引
     memory_blocks[1] = start_of_app_data;
-    size_of_each_block[1] = app_msg_length;
+    size_of_each_block[1] = strlen(start_of_app_data);
     // --------------------------------------- 创建第二个 memory block ---------------------------------------
     // ---------------------------------------      准备计算哈希值      ---------------------------------------
     output = calculate_static_fields_hash_of_multiple_memory_blocks(memory_blocks, size_of_each_block, block_size, net);
@@ -115,6 +116,7 @@ unsigned char *calculate_static_fields_hash_of_icing(struct lirhdr *lir_header,
     lir_header->current_path_index = original_current_path_index;
     lir_header->check = original_check_sum;
     lir_header->id = original_id;
+    lir_header->current_hop = original_current_hop;
     // ---------------------------------------      进行字段的还原      ---------------------------------------
     return output;
 }
