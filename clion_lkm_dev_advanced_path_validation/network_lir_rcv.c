@@ -487,16 +487,15 @@ int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struc
     }
     // 获取目的卫星编号
     destination_node_id = ntohs(lir_header->destination);
-    // printk(KERN_EMERG "current satellite id: %d, destination satellite id: %d\n", current_satellite_id, destination_node_id);
+    // 判断是否已经到达了目的地
+    bool local_deliver = (current_satellite_id == destination_node_id);
+    // 不管是否到达了目的地，都需要计算哈希，并计算mac
+    // ----------------------------------------------------------------------------------------------------------------------------
     // 获取 opt 数据部分, 注意这里由于没有调用 ip_options_build 所以我们不能使用 opt->__data。
     opt_data_pointer = (u8 *) &(lir_header[1]);
     // 将 option 字段的内容进行拷贝
     bloom_filter_bitset = net_bloom_filter->bitset;
     net_bloom_filter->bitset = (unsigned long*)(opt_data_pointer); // 不能删除
-    // --------------------------------------------- get the static hash of the lir_header ------------------------------------
-    // unsigned char* static_fields_hash = calculate_static_fields_hash_of_bpt(lir_header, udp_header, current_net_namespace);
-    // unsigned char* static_fields_hash = calculate_static_fields_hash(lir_header, current_net_namespace);
-    // print_hash_or_hmac_result(static_fields_hash, HASH_OUTPUT_LENGTH_IN_BYTES);
     unsigned char* static_fields_hash = calculate_static_fields_hash_of_bpt(lir_header, udp_header, current_net_namespace);
     struct shash_desc* hmac_data_structure = get_hmac_data_structure(current_net_namespace);
     int source_satellite_id = ntohs(lir_header->source);
@@ -507,30 +506,44 @@ int lir_rcv_options_and_forward_packets(struct net *current_net_namespace, struc
                                       HASH_OUTPUT_LENGTH_IN_BYTES,
                                       key_from_source_to_intermediate);
     kfree(static_fields_hash);
-    // --------------------------------------------- get the static hash of the lir_header ------------------------------------
-    // --------------------------------------------- 现在的实现方式 -- 使用新的接口表 ---------------------------------------------
-    // 卫星仅仅可能存在四个接口
-    // printk(KERN_EMERG "lir_header->pvf = %d\n", lir_header->pvf);
-    for(index = 0; index < new_interface_table->number_of_interfaces; index++){
-        struct NewInterfaceEntry new_interface_entry = new_interface_table->interface_entry_array[index];
-        u32 temp_result = lir_header->pvf ^ ((u32)(new_interface_entry.link_identifier)) ^ (*hmac_result);
-        if(0 == check_element_in_bloom_filter(net_bloom_filter, &(temp_result), sizeof(u32))){
-            if(dev->ifindex == new_interface_entry.interface->ifindex){
-                continue;
-            } else {
-                skb_get(skb);
-                lir_packet_forward(skb, new_interface_entry.interface, current_net_namespace);
-                lir_header->pvf ^= temp_result;
+    // ----------------------------------------------------------------------------------------------------------------------------
+    if(!local_deliver){
+        // --------------------------------------------- get the static hash of the lir_header ------------------------------------
+        // --------------------------------------------- 现在的实现方式 -- 使用新的接口表 ---------------------------------------------
+        // 卫星仅仅可能存在四个接口
+        for(index = 0; index < new_interface_table->number_of_interfaces; index++){
+            struct NewInterfaceEntry new_interface_entry = new_interface_table->interface_entry_array[index];
+            u32 temp_result = lir_header->pvf ^ ((u32)(new_interface_entry.link_identifier)) ^ (*hmac_result);
+            if(0 == check_element_in_bloom_filter(net_bloom_filter, &(temp_result), sizeof(u32))){
+                if(dev->ifindex == new_interface_entry.interface->ifindex){
+                    continue;
+                } else {
+                    skb_get(skb);
+                    lir_packet_forward(skb, new_interface_entry.interface, current_net_namespace);
+                    lir_header->pvf = temp_result;
+                }
             }
         }
+        kfree(hmac_result);
+        // 将 net_bloom_filter->bitset 还原,以便进行后续的销毁
+        net_bloom_filter->bitset = bloom_filter_bitset; // 不能删除
     }
-    kfree(hmac_result);
-    // 将 net_bloom_filter->bitset 还原,以便进行后续的销毁
-    net_bloom_filter->bitset = bloom_filter_bitset; // 不能删除
     // 不管 forward_count 是 0 是 1 还是大于 1 都需要经过这里的判断，判断是否要上交
-    bool local_deliver = (current_satellite_id == destination_node_id);
+    // bool local_deliver = (current_satellite_id == destination_node_id);
     if(local_deliver){
-        return NET_RX_SUCCESS;
+        // 我们需要检查是否最终节点也是合法的
+        print_hash_or_hmac_result((unsigned char*)(&(lir_header->pvf)), sizeof(u32));
+        u32 temp_result = lir_header->pvf ^ (*hmac_result);
+        if(0 == check_element_in_bloom_filter(net_bloom_filter, &temp_result, sizeof(u32))){
+            kfree(hmac_result);
+            net_bloom_filter->bitset = bloom_filter_bitset;
+            return NET_RX_SUCCESS;
+        } else {
+            kfree(hmac_result);
+            net_bloom_filter->bitset = bloom_filter_bitset;
+            kfree_skb(skb);
+            return NET_RX_DROP;
+        }
     } else {
         kfree_skb(skb);
         if (first_hop_packet){

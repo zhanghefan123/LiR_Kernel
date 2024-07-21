@@ -522,6 +522,7 @@ struct sk_buff* lir_make_skb_core(struct sock *sk,
             int link_identifier = lir_routing_entry->link_identifiers[index+1];
             final_insert_element ^= (*hmac_result) ^ (u32)(link_identifier); // 和转发的链路标识进行异或的操作
         } else {
+            print_hash_or_hmac_result((unsigned char*)(&final_insert_element), sizeof(u32));
             final_insert_element ^= (*hmac_result); // 计算插入的元素
         }
         kfree(hmac_result);
